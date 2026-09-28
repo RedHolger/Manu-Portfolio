@@ -1,0 +1,31 @@
+apiVersion: portfolio.sre/v1
+kind: FaultExperiment
+metadata:
+  name: telem-loss
+spec:
+  context: kind-sre-lab
+  namespace: sre-lab
+  target:
+    service: reservations
+    slot: stable
+  workload:
+    rate: 30
+    seed: 15
+    timeoutSeconds: 2
+  phases:
+    baselineSeconds: 10
+    faultSeconds: 20
+    recoverySeconds: 10
+  fault:
+    type: gateway_delay
+    delayMilliseconds: 400
+    fraction: 0.5
+    ttlSeconds: 30
+  abort:
+    maxFailureRatio: 0.50
+    consecutiveWindows: 2
+    windowSeconds: 5
+  assertions:
+    duplicateReservations: 0
+    negativeInventory: false
+    recoveryDeadlineSeconds: 120

@@ -1,0 +1,246 @@
+// runner_test.go — F2 lifecycle with fakes (no cluster).
+package faultlab
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"sre-portfolio/internal/clock"
+	"sre-portfolio/internal/loadgen"
+)
+
+// labDouble serves reservations (201) and exposition counters. failEveryNth
+// request returns 500 (0 = all healthy).
+type labDouble struct {
+	srv       *httptest.Server
+	total     atomic.Int64
+	failed    atomic.Int64
+	failEvery int
+	slot      string
+	down      atomic.Bool
+}
+
+func newLabDouble(t *testing.T, slot string, failEvery int) *labDouble {
+	t.Helper()
+	d := &labDouble{slot: slot, failEvery: failEvery}
+	d.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if d.down.Load() {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			conn, _, _ := hj.Hijack()
+			_ = conn.Close() // transport error, not HTTP status
+			return
+		}
+		if r.URL.Path == "/metrics" {
+			total := d.total.Load()
+			failed := d.failed.Load()
+			fmt.Fprintf(w, `lab_requests_total{service="reservations",slot=%q,route="/v1/reservations",result="success"} %d
+lab_requests_total{service="reservations",slot=%q,route="/v1/reservations",result="server_error"} %d
+`, d.slot, total-failed, d.slot, failed)
+			return
+		}
+		n := d.total.Add(1)
+		if failEvery > 0 && int(n)%failEvery == 0 {
+			d.failed.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"x"}`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	t.Cleanup(d.srv.Close)
+	return d
+}
+
+func testScenario() Scenario {
+	return Scenario{
+		Name: "t", Context: WantContext, Namespace: WantNamespace,
+		Service: "reservations", Slot: "stable",
+		Rate: 20, Seed: 1, Timeout: 2,
+		Baseline: 1, FaultSecs: 2, Recover: 1,
+		FaultKind: FaultDelay, DelayMs: 100, Fraction: 0.5, TTL: 30,
+		AbortMax: 0.5, AbortN: 2, AbortWin: 1,
+	}
+}
+
+func testRunner(t *testing.T, gw string) (*Runner, *Journal, *FakeInjector) {
+	t.Helper()
+	j, err := Open(filepath.Join(t.TempDir(), "j.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = j.Close() })
+	f := NewFakeInjector()
+	r := &Runner{
+		Journal: j, Injector: f, Clock: clock.RealClock{},
+		Gateway: gw, OutDir: t.TempDir(),
+		CheckContext: func(ctx context.Context) error { return nil },
+		LoadTimeout:  5 * time.Second, CleanupCap: 10 * time.Second,
+	}
+	// Silence unused loadgen import if runner stops using it directly.
+	_ = loadgen.Config{}
+	return r, j, f
+}
+
+func TestRunnerCleanPass(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, f := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	term, err := r.Run(context.Background(), sc, "run-1")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if term != StPassed {
+		t.Fatalf("terminal=%s, want PASSED", term)
+	}
+	row, _ := j.GetRun("run-1")
+	if row.State != StPassed {
+		t.Fatalf("journal=%s", row.State)
+	}
+	if live, _ := f.Active(context.Background()); len(live) != 0 {
+		t.Fatalf("faults live after pass: %v", live)
+	}
+	if n, _ := j.EventCount("run-1"); n < 7 {
+		t.Fatalf("events=%d, want full phase trail", n)
+	}
+	// Lock released: a second run proceeds.
+	if _, err := r.Run(context.Background(), sc, "run-2"); err != nil {
+		t.Fatalf("second run blocked: %v", err)
+	}
+}
+
+func TestRunnerAbortOnFailure(t *testing.T) {
+	d := newLabDouble(t, "stable", 1) // every request fails
+	r, _, f := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	sc.FaultSecs = 5 // abort needs ~3 one-second ticks to see two windows
+	term, err := r.Run(context.Background(), sc, "run-ab")
+	if err == nil || !strings.Contains(err.Error(), "abort") {
+		t.Fatalf("term=%s err=%v, want abort", term, err)
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED", term)
+	}
+	if live, _ := f.Active(context.Background()); len(live) != 0 {
+		t.Fatalf("fault not cleaned after abort: %v", live)
+	}
+}
+
+func TestRunnerCancelCleansUp(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, f := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	sc.Baseline, sc.FaultSecs = 1, 30
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan string, 1)
+	go func() {
+		term, _ := r.Run(ctx, sc, "run-cancel")
+		done <- term
+	}()
+	time.Sleep(1500 * time.Millisecond)
+	cancel()
+	select {
+	case term := <-done:
+		if term != StFailed && term != StCleanupF {
+			t.Fatalf("terminal=%s after cancel", term)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("run did not terminate after cancel")
+	}
+	row, _ := j.GetRun("run-cancel")
+	if !Terminal(row.State) {
+		t.Fatalf("non-terminal after cancel: %s", row.State)
+	}
+	if live, _ := f.Active(context.Background()); len(live) != 0 {
+		t.Fatalf("faults live after cancel: %v", live)
+	}
+}
+
+func TestRunnerLockBlocksConcurrent(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, f := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	if err := j.CreateRun("other", "h", "reservations", 1, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), sc, "run-locked"); err == nil {
+		t.Fatal("expected lock error")
+	}
+	if len(f.Applied) != 0 {
+		t.Fatalf("mutation attempted despite lock: %+v", f.Applied)
+	}
+}
+
+func TestReconcileUnfinished(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, f := testRunner(t, d.srv.URL)
+	_ = d
+	if err := j.CreateRun("r-old", "h", "reservations", 1, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a crash mid-INJECTING with a recorded-but-dangling fault.
+	if err := j.Transition("r-old", StCreated, StPreflight, "e", "{}", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Transition("r-old", StPreflight, StInjecting, "e", "{}", ""); err == nil {
+		t.Fatal("PREFLIGHT->INJECTING must be illegal (must pass BASELINE)")
+	}
+	if err := j.Transition("r-old", StPreflight, StBaseline, "e", "{}", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Transition("r-old", StBaseline, StInjecting, "e", "{}", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.RecordFault("r-old", "r-old-f1", FaultDelay, `{"slot":"stable"}`, "2030-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Apply(context.Background(), Injection{ID: "r-old-f1", Kind: FaultDelay}); err != nil {
+		t.Fatal(err)
+	}
+	done, err := r.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(done) != 1 || done[0] != "r-old" {
+		t.Fatalf("reconciled=%v", done)
+	}
+	row, _ := j.GetRun("r-old")
+	if row.State != StFailed {
+		t.Fatalf("state=%s, want FAILED", row.State)
+	}
+	if !strings.Contains(row.Error, "interrupted") {
+		t.Fatalf("error=%q, want interrupted note", row.Error)
+	}
+	if live, _ := f.Active(context.Background()); len(live) != 0 {
+		t.Fatalf("dangling fault after reconcile: %v", live)
+	}
+}
+
+func TestRunnerResultJSON(t *testing.T) {
+	// Report shape sanity: journaled evidence serializes.
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	term, err := r.Run(context.Background(), testScenario(), "run-json")
+	if err != nil || term != StPassed {
+		t.Fatalf("term=%s err=%v", term, err)
+	}
+	row, _ := j.GetRun("run-json")
+	raw, err := json.Marshal(map[string]any{
+		"id": row.ID, "state": row.State, "seed": row.Seed,
+	})
+	if err != nil || len(raw) == 0 {
+		t.Fatal("report marshal failed")
+	}
+}

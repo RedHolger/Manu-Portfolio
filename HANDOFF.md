@@ -37,3 +37,8 @@
 - Disk is the binding constraint (~2.9GiB at branch time); floor 2GB armed.
 - Go 1.27.1, kind 0.33.0, kubectl 1.37.1, promtool 3.15.0, pgx v5.11.0.
 - SQLite driver not yet vendored (need CGO-free pure-Go module).
+
+## FaultLab F2 status (faultlab-dev): implemented + demonstrated
+Runner, injector, observer, CLI complete; 7/7 acceptance demos evidenced in
+results/faultlab/. BudgetGuard external review + 10-per-class: still PENDING.
+Next: F3 (pod deletion + dependency faults) only when resourced.

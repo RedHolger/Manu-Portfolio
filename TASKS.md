@@ -248,3 +248,17 @@
 - CLI: validate + plan (target/workload/phases/fault/abort/cleanup/permissions).
   run/status/cleanup/reconcile/report intentionally absent until F2.
 - `go test ./...` all green. Disk 2.6GiB (sqlite module cost ~300MB).
+
+## Session: FaultLab F2 complete (faultlab-dev)
+- Gateway injector (bounded admin client, kind mapping, idempotent) + fake-admin
+  contract tests. Observer (exposition scrape, window ratios, consecutive abort
+  logic) + unit tests incl. 12s live-abort test.
+- Runner: journaled phases, preflight probe, abort (3-strike telemetry loss),
+  fresh-context cleanup, verified-or-CLEANUP_FAILED, SIGTERM-safe deferred net,
+  reconcileOne/forceFailed (terminal FAILED is not a mechanical error).
+- CLI: run/status/cleanup/reconcile/report (+ kubectl context check).
+- 7/7 live demos on kind-sre-lab (see results/faultlab/EVIDENCE.md):
+  invalid-reject, expire+recover PASSED, SIGTERM cleanup, SIGKILL TTL expiry,
+  reconcile interrupted, abort + telemetry-loss CLEANUP_FAILED, dup cleanup.
+- Full `go test ./...` green. Lab scaled back to 0; disk 1.5GiB steady.
+- Deferred intact: F3/F4, pod deletion, correctness oracle, RecoverOps.
