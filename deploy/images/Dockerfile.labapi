@@ -1,0 +1,5 @@
+# Static binaries are built locally (CGO_ENABLED=0) — no SDK pull.
+# Context: deploy/images/bin/ (contains the binary only).
+FROM scratch
+COPY labapi /labapi
+ENTRYPOINT ["/labapi"]

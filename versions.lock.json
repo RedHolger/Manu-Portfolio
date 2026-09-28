@@ -1,0 +1,19 @@
+{
+  "generated": "2026-09-27",
+  "status": "PARTIAL — kind cluster live; Grafana provisioning + screenshots pending.",
+  "go": "go1.27.1 darwin/arm64 (brew, measured)",
+  "kind": "v0.33.0 (brew, measured)",
+  "kind_node_image": "kindest/node@sha256:a1ed56cfb0e7 (v1.37.0, docker image ID a1ed56cfb0e7, measured in node containerd)",
+  "kubectl": "v1.37.1 (brew, measured; server v1.37.0)",
+  "postgresql": "docker.io/library/postgres:16@sha256:c319f2a8182bc (in node containerd, measured)",
+  "prometheus": "docker.io/prom/prometheus:v3.15.0@sha256:21cfe572fdc08 (in node containerd, measured; == :v3 digest)",
+  "alertmanager": null,
+  "grafana": "docker.io/grafana/grafana:11.6@sha256:c779f41eff4aa (in node containerd, measured)",
+  "modules": {
+    "github.com/jackc/pgx/v5": "v5.11.0 (go.mod, measured)"
+  },
+  "local_binaries": {
+    "sre-labapi:local": "sha256:8136262b83c2a394600ce2bd891648d0a98c66ca4a9a11912e5f33db40d947b8",
+    "sre-labgateway:local": "sha256:b8d0d4b1e35bf44f8c1ba96a3aa295475b2b795e388bdc65cec751fddd1c6628"
+  }
+}

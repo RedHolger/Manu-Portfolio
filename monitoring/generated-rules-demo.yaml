@@ -1,0 +1,15 @@
+# DEMO-ONLY rules: short windows for live demonstration.
+# Never evaluate production SLO compliance with this file (D-007).
+groups:
+- name: budgetguard-demo-reservations
+  interval: 5s
+  rules:
+  - record: service:demo_bad_ratio:30s
+    expr: |
+      1 - (sum by (service) (rate(lab_requests_total{service="reservations",result="success"}[30s]))
+        / sum by (service) (rate(lab_requests_total{service="reservations"}[30s])))
+  - alert: LabReleaseRegression
+    expr: service:demo_bad_ratio:30s > 0.01
+    for: 10s
+    labels:
+      severity: demo

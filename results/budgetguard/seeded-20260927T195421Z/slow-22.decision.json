@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "decision": "FAIL",
+  "reasons": [
+    "candidate_error_rate_exceeded",
+    "candidate_error_rate_increase_exceeded",
+    "candidate_slow_rate_exceeded",
+    "candidate_slow_rate_increase_exceeded"
+  ],
+  "window": {
+    "start": "2026-09-27T20:06:17Z",
+    "end": "2026-09-27T20:11:17Z"
+  },
+  "stable": {
+    "eligible": 15748,
+    "bad": 0,
+    "slow_or_bad": 0
+  },
+  "candidate": {
+    "eligible": 4061,
+    "bad": 79,
+    "slow_or_bad": 2357
+  },
+  "history_complete": false,
+  "policy_hash": "18c2b31bdf994d3abe54f0ad14024d827b2440b878c2f9c575ef171a9838452e",
+  "estimated_counts": false
+}

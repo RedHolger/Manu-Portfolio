@@ -1,0 +1,9 @@
+apiVersion: portfolio.sre/v1
+kind: ReleaseProfile
+metadata:
+  name: healthy
+spec:
+  slot: candidate
+  mode: healthy        # no injected errors, no added delay
+  candidatePercent: 20
+  seed: 42

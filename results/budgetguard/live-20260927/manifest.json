@@ -1,0 +1,1 @@
+{"schema_version":1,"run_id":"live-20260927","commit":"uncommitted","seed":42,"profile":"healthy-50rps-150s-20pct-candidate","services":"labapi x2 + labgateway + prometheus(local, no kind)"}

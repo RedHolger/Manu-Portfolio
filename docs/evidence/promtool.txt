@@ -1,0 +1,126 @@
+== promtool --version ==
+promtool, version 3.15.0 (branch: non-git, revision: non-git)
+  build user:       reproducible@reproducible
+  build date:       20260925-07:25:38
+  go version:       go1.27.1
+  platform:         darwin/arm64
+  tags:             netgo,builtinassets
+
+== promtool check --help ==
+usage: promtool check [<flags>] <command> [<args> ...]
+
+Check the resources for validity.
+
+
+Flags:
+  -h, --[no-]help                Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --[no-]version             Show application version.
+      --[no-]experimental        Enable experimental commands.
+      --enable-feature= ...      Comma separated feature names to enable.
+                                 Valid options: promql-experimental-functions,
+                                 promql-delayed-name-removal,
+                                 promql-extended-range-selectors. See
+                                 https://prometheus.io/docs/prometheus/latest/feature_flags/
+                                 for more details
+      --query.lookback-delta=5m  The server's maximum query lookback duration.
+
+Subcommands:
+check service-discovery [<flags>] <config-file> <job>
+    Perform service discovery for the given job name and report the results,
+    including relabeling.
+
+check config [<flags>] <config-files>...
+    Check if the config files are valid or not.
+
+check web-config <web-config-files>...
+    Check if the web config files are valid or not.
+
+check healthy [<flags>]
+    Check if the Prometheus server is healthy.
+
+check ready [<flags>]
+    Check if the Prometheus server is ready.
+
+check rules [<flags>] [<rule-files>...]
+    Check if the rule files are valid or not.
+
+check metrics [<flags>]
+    Pass Prometheus metrics over stdin to lint them for consistency and
+    correctness, and optionally perform cardinality analysis.
+
+    examples:
+
+    $ cat metrics.prom | promtool check metrics
+
+    $ curl -s http://localhost:9090/metrics | promtool check metrics --extended
+
+    $ curl -s http://localhost:9100/metrics | promtool check metrics --extended
+    --lint=none
+
+
+
+== promtool test --help ==
+usage: promtool test [<flags>] <command> [<args> ...]
+
+Unit testing.
+
+
+Flags:
+  -h, --[no-]help            Show context-sensitive help (also try --help-long
+                             and --help-man).
+      --[no-]version         Show application version.
+      --[no-]experimental    Enable experimental commands.
+      --enable-feature= ...  Comma separated feature names to enable.
+                             Valid options: promql-experimental-functions,
+                             promql-delayed-name-removal,
+                             promql-extended-range-selectors. See
+                             https://prometheus.io/docs/prometheus/latest/feature_flags/
+                             for more details
+      --junit=JUNIT          File path to store JUnit XML test results.
+
+Subcommands:
+test rules [<flags>] <test-rule-file>...
+    Unit tests for rules.
+
+
+
+== promtool check config --help ==
+usage: promtool check config [<flags>] <config-files>...
+
+Check if the config files are valid or not.
+
+
+Flags:
+  -h, --[no-]help                Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --[no-]version             Show application version.
+      --[no-]experimental        Enable experimental commands.
+      --enable-feature= ...      Comma separated feature names to enable.
+                                 Valid options: promql-experimental-functions,
+                                 promql-delayed-name-removal,
+                                 promql-extended-range-selectors. See
+                                 https://prometheus.io/docs/prometheus/latest/feature_flags/
+                                 for more details
+      --query.lookback-delta=5m  The server's maximum query lookback duration.
+      --[no-]syntax-only         Only check the config file syntax, ignoring
+                                 file and content validation referenced in the
+                                 config
+      --lint="duplicate-rules"   Linting checks to apply to the rules/scrape
+                                 configs specified in the config. Available
+                                 options are: all, duplicate-rules, none,
+                                 too-long-scrape-interval. Use --lint=none to
+                                 disable linting
+      --[no-]lint-fatal          Make lint errors exit with exit code 3.
+      --[no-]ignore-unknown-fields  
+                                 Ignore unknown fields in the rule groups read
+                                 by the config files. This is useful when you
+                                 want to extend rule files with custom metadata.
+                                 Ensure that those fields are removed before
+                                 loading them into the Prometheus server as it
+                                 performs strict checks by default.
+      --[no-]agent               Check config file for Prometheus in Agent mode.
+
+Args:
+  <config-files>  The config files to check.
+

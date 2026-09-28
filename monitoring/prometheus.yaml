@@ -1,0 +1,10 @@
+# Local Prometheus scrape config (kind port-forward alternative).
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+rule_files:
+  - generated-rules.yaml
+scrape_configs:
+  - job_name: labgateway
+    static_configs:
+      - targets: ['127.0.0.1:8080']

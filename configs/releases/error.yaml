@@ -1,0 +1,10 @@
+apiVersion: portfolio.sre/v1
+kind: ReleaseProfile
+metadata:
+  name: error
+spec:
+  slot: candidate
+  mode: error          # seeded 5% pre-transaction errors (LAB_MODE=error)
+  errorRate: 0.05
+  candidatePercent: 20
+  seed: 42

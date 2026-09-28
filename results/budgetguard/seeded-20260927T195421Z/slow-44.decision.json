@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "decision": "FAIL",
+  "reasons": [
+    "candidate_slow_rate_exceeded",
+    "candidate_slow_rate_increase_exceeded"
+  ],
+  "window": {
+    "start": "2026-09-27T20:09:06Z",
+    "end": "2026-09-27T20:14:06Z"
+  },
+  "stable": {
+    "eligible": 15525,
+    "bad": 0,
+    "slow_or_bad": 0
+  },
+  "candidate": {
+    "eligible": 4167,
+    "bad": 0,
+    "slow_or_bad": 4167
+  },
+  "history_complete": false,
+  "policy_hash": "18c2b31bdf994d3abe54f0ad14024d827b2440b878c2f9c575ef171a9838452e",
+  "estimated_counts": false
+}

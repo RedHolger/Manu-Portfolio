@@ -1,0 +1,98 @@
+groups:
+- name: budgetguard-reservations
+  interval: 30s
+  rules:
+  - record: service:availability_bad_ratio:5m
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_requests_total{service="reservations",result="success"}[5m]))
+        / sum by (service) (rate(lab_requests_total{service="reservations",result!="client_error"}[5m]))
+      )
+  - record: service:availability_bad_ratio:30m
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_requests_total{service="reservations",result="success"}[30m]))
+        / sum by (service) (rate(lab_requests_total{service="reservations",result!="client_error"}[30m]))
+      )
+  - record: service:availability_bad_ratio:1h
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_requests_total{service="reservations",result="success"}[1h]))
+        / sum by (service) (rate(lab_requests_total{service="reservations",result!="client_error"}[1h]))
+      )
+  - record: service:availability_bad_ratio:6h
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_requests_total{service="reservations",result="success"}[6h]))
+        / sum by (service) (rate(lab_requests_total{service="reservations",result!="client_error"}[6h]))
+      )
+  - record: service:availability_bad_ratio:3d
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_requests_total{service="reservations",result="success"}[3d]))
+        / sum by (service) (rate(lab_requests_total{service="reservations",result!="client_error"}[3d]))
+      )
+  - record: service:latency_bad_ratio:5m
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_request_duration_seconds_bucket{service="reservations",result="success",le="0.3"}[5m]))
+        / sum by (service) (rate(lab_request_duration_seconds_count{service="reservations",result!="client_error"}[5m]))
+      )
+  - record: service:latency_bad_ratio:30m
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_request_duration_seconds_bucket{service="reservations",result="success",le="0.3"}[30m]))
+        / sum by (service) (rate(lab_request_duration_seconds_count{service="reservations",result!="client_error"}[30m]))
+      )
+  - record: service:latency_bad_ratio:1h
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_request_duration_seconds_bucket{service="reservations",result="success",le="0.3"}[1h]))
+        / sum by (service) (rate(lab_request_duration_seconds_count{service="reservations",result!="client_error"}[1h]))
+      )
+  - record: service:latency_bad_ratio:6h
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_request_duration_seconds_bucket{service="reservations",result="success",le="0.3"}[6h]))
+        / sum by (service) (rate(lab_request_duration_seconds_count{service="reservations",result!="client_error"}[6h]))
+      )
+  - record: service:latency_bad_ratio:3d
+    expr: |
+      1 - (
+        sum by (service) (rate(lab_request_duration_seconds_bucket{service="reservations",result="success",le="0.3"}[3d]))
+        / sum by (service) (rate(lab_request_duration_seconds_count{service="reservations",result!="client_error"}[3d]))
+      )
+  - alert: ReservationsAvailabilityFastBurn
+    expr: |
+      (
+        (service:availability_bad_ratio:1h > 14.4 * 0.0010000000000000009)
+        and on(service)
+        (service:availability_bad_ratio:5m > 14.4 * 0.0010000000000000009)
+      )
+      or on(service)
+      (
+        (service:availability_bad_ratio:6h > 6 * 0.0010000000000000009)
+        and on(service)
+        (service:availability_bad_ratio:30m > 6 * 0.0010000000000000009)
+      )
+    for: 2m
+    labels:
+      severity: page
+  - alert: ReservationsLatencyFastBurn
+    expr: |
+      (
+        (service:latency_bad_ratio:1h > 14.4 * 0.010000000000000009)
+        and on(service)
+        (service:latency_bad_ratio:5m > 14.4 * 0.010000000000000009)
+      )
+    for: 2m
+    labels:
+      severity: page
+  - alert: LabTelemetryMissing
+    expr: |
+      absent(sum by (service) (rate(lab_requests_total{service="reservations"}[5m])))
+    for: 2m
+    labels:
+      severity: ticket
+    annotations:
+      summary: 'no telemetry for reservations; release state is UNKNOWN'

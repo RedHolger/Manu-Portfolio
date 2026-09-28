@@ -1,0 +1,10 @@
+apiVersion: portfolio.sre/v1
+kind: ReleaseProfile
+metadata:
+  name: slow
+spec:
+  slot: candidate
+  mode: slow           # +400ms pre-transaction delay (LAB_MODE=slow)
+  delayMilliseconds: 400
+  candidatePercent: 20
+  seed: 42

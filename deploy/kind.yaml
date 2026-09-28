@@ -1,0 +1,13 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: sre-lab
+# Single node by design (D-004): tests app/pod failures, NOT zone loss.
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080  # gateway public
+        hostPort: 8080
+      - containerPort: 30090  # prometheus
+        hostPort: 9090
+      - containerPort: 30300  # grafana
+        hostPort: 3000

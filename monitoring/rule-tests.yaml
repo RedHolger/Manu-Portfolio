@@ -1,0 +1,156 @@
+# rule-tests.yaml — promtool rule unit tests (correction #6: burst PAIR).
+# Synthetic timestamps only; no 6-hour waits in CI. Production windows here;
+# demo windows live in rule-tests-demo.yaml (separate labeled file).
+rule_files:
+  - generated-rules.yaml
+
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    name: healthy — no alerts
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="stable",route="/v1/reservations",result="success"}'
+        values: 0+100x120
+      - series: 'lab_requests_total{service="reservations",slot="stable",route="/v1/reservations",result="server_error"}'
+        values: 0+0x120
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts: []
+
+  - interval: 1m
+    name: sustained error — pages
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+95x180
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+5x180
+    alert_rule_test:
+      - eval_time: 180m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: reservations
+            exp_annotations: {}
+
+  - interval: 1m
+    name: moderate short burst — must NOT page (5m fires, 1h does not)
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+100x120
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+0x100 0+5x5 25+0x15
+    alert_rule_test:
+      - eval_time: 103m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts: []
+
+  - interval: 1m
+    name: severe sustained burst — must page
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+50x180
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+50x180
+    alert_rule_test:
+      - eval_time: 180m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: reservations
+            exp_annotations: {}
+
+  - interval: 1m
+    name: slow-only — latency pages, availability does not
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+100x120
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+0x120
+      - series: 'lab_request_duration_seconds_count{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+100x120
+      - series: 'lab_request_duration_seconds_bucket{service="reservations",slot="candidate",route="/v1/reservations",result="success",le="0.3"}'
+        values: 0+50x120
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: ReservationsLatencyFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: reservations
+            exp_annotations: {}
+      - eval_time: 120m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts: []
+
+  - interval: 1m
+    name: counter reset mid-window — sustained error still pages
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+95x60 0+95x60
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+5x60 0+5x60
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: reservations
+            exp_annotations: {}
+
+  - interval: 1m
+    name: client_error traffic — excluded, must not page
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+90x120
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="client_error"}'
+        values: 0+10x120
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+0x120
+      - series: 'lab_request_duration_seconds_count{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+90x120
+      - series: 'lab_request_duration_seconds_count{service="reservations",slot="candidate",route="/v1/reservations",result="client_error"}'
+        values: 0+10x120
+      - series: 'lab_request_duration_seconds_bucket{service="reservations",slot="candidate",route="/v1/reservations",result="success",le="0.3"}'
+        values: 0+90x120
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: ReservationsLatencyFastBurn
+        exp_alerts: []
+
+  - interval: 1m
+    name: present but flat counters — no traffic, not missing (no alerts at all)
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="stable",route="/v1/reservations",result="success"}'
+        values: 5000+0x120
+      - series: 'lab_request_duration_seconds_count{service="reservations",slot="stable",route="/v1/reservations",result="success"}'
+        values: 5000+0x120
+      - series: 'lab_request_duration_seconds_bucket{service="reservations",slot="stable",route="/v1/reservations",result="success",le="0.3"}'
+        values: 5000+0x120
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: LabTelemetryMissing
+        exp_alerts: []
+
+  - interval: 1m
+    name: missing series — telemetry alert, no burn page
+    input_series:
+      - series: 'up{job="labgateway"}'
+        values: 1+0x120
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: LabTelemetryMissing
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+            exp_annotations:
+              summary: 'no telemetry for reservations; release state is UNKNOWN'
