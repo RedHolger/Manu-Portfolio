@@ -75,36 +75,36 @@ func CompileRules(c ServiceSLO) string {
 		}
 		_ = thr
 	}
-	// Availability alerts (multiwindow, SRE Workbook Ch.5 shape).
+	// Burn alerts, workbook shape (H8): fast-burn pages, slow-burn tickets,
+	// long-window tickets — separate alerts per severity, per SLI.
 	ab := 1 - c.AvailabilityTarget
-	fmt.Fprintf(&b, "  - alert: %sAvailabilityFastBurn\n", title(c.Service))
-	fmt.Fprintln(&b, "    expr: |")
-	fmt.Fprintf(&b, "      (\n")
-	fmt.Fprintf(&b, "        (service:availability_bad_ratio:1h > %g * %g)\n", PageFactor, ab)
-	fmt.Fprintln(&b, "        and on(service)")
-	fmt.Fprintf(&b, "        (service:availability_bad_ratio:5m > %g * %g)\n", PageFactor, ab)
-	fmt.Fprintln(&b, "      )")
-	fmt.Fprintln(&b, "      or on(service)")
-	fmt.Fprintf(&b, "      (\n")
-	fmt.Fprintf(&b, "        (service:availability_bad_ratio:6h > %g * %g)\n", TicketFactor, ab)
-	fmt.Fprintln(&b, "        and on(service)")
-	fmt.Fprintf(&b, "        (service:availability_bad_ratio:30m > %g * %g)\n", TicketFactor, ab)
-	fmt.Fprintln(&b, "      )")
-	fmt.Fprintln(&b, "    for: 2m")
-	fmt.Fprintln(&b, "    labels:")
-	fmt.Fprintln(&b, "      severity: page")
-	// Latency alerts mirror availability at the latency budget.
 	lb := 1 - c.LatencyTarget
-	fmt.Fprintf(&b, "  - alert: %sLatencyFastBurn\n", title(c.Service))
-	fmt.Fprintln(&b, "    expr: |")
-	fmt.Fprintf(&b, "      (\n")
-	fmt.Fprintf(&b, "        (service:latency_bad_ratio:1h > %g * %g)\n", PageFactor, lb)
-	fmt.Fprintln(&b, "        and on(service)")
-	fmt.Fprintf(&b, "        (service:latency_bad_ratio:5m > %g * %g)\n", PageFactor, lb)
-	fmt.Fprintln(&b, "      )")
-	fmt.Fprintln(&b, "    for: 2m")
-	fmt.Fprintln(&b, "    labels:")
-	fmt.Fprintln(&b, "      severity: page")
+	alertPair := func(name, severity, sli string, fastW [2]string, fastF float64, slowW [2]string, slowF float64, budget float64) {
+		fmt.Fprintf(&b, "  - alert: %s%s\n", title(c.Service), name)
+		fmt.Fprintln(&b, "    expr: |")
+		fmt.Fprintf(&b, "      (\n")
+		fmt.Fprintf(&b, "        (service:%s_bad_ratio:%s > %g * %g)\n", sli, fastW[0], fastF, budget)
+		fmt.Fprintln(&b, "        and on(service)")
+		fmt.Fprintf(&b, "        (service:%s_bad_ratio:%s > %g * %g)\n", sli, fastW[1], fastF, budget)
+		fmt.Fprintln(&b, "      )")
+		fmt.Fprintln(&b, "      or on(service)")
+		fmt.Fprintf(&b, "      (\n")
+		fmt.Fprintf(&b, "        (service:%s_bad_ratio:%s > %g * %g)\n", sli, slowW[0], slowF, budget)
+		fmt.Fprintln(&b, "        and on(service)")
+		fmt.Fprintf(&b, "        (service:%s_bad_ratio:%s > %g * %g)\n", sli, slowW[1], slowF, budget)
+		fmt.Fprintln(&b, "      )")
+		fmt.Fprintln(&b, "    for: 2m")
+		fmt.Fprintln(&b, "    labels:")
+		fmt.Fprintf(&b, "      severity: %s\n", severity)
+	}
+	alertPair("AvailabilityFastBurn", "page", "availability",
+		[2]string{"1h", "5m"}, PageFactor, [2]string{"6h", "30m"}, TicketFactor, ab)
+	alertPair("AvailabilityTicketBurn", "ticket", "availability",
+		[2]string{"6h", "30m"}, TicketFactor, [2]string{"3d", "6h"}, LongFactor, ab)
+	alertPair("LatencyFastBurn", "page", "latency",
+		[2]string{"1h", "5m"}, PageFactor, [2]string{"6h", "30m"}, TicketFactor, lb)
+	alertPair("LatencyTicketBurn", "ticket", "latency",
+		[2]string{"6h", "30m"}, TicketFactor, [2]string{"3d", "6h"}, LongFactor, lb)
 	// Missing-telemetry alert (separate from burn alerts; UNKNOWN ≠ PASS).
 	fmt.Fprintln(&b, "  - alert: LabTelemetryMissing")
 	fmt.Fprintln(&b, "    expr: |")

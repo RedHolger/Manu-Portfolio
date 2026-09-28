@@ -216,3 +216,19 @@
   SUMMARY lists contaminated + below-minimum runs with reasons.
 - Local commit only (no remote configured, nothing pushed). FaultLab /
   RecoverOps remain deferred.
+
+## Session 2026-09-28 (correctness-fixes branch) — all findings fixed + full-window acceptance
+- H1 coverage gate (CheckCoverage: ≤10% missing, no gap >20s, window edges) +
+  4 regression tests (incl. grid-alignment lesson). H2 shared envelope/sample
+  validation for Query + 3 instant-path tests (caught a real [2]any bug).
+- H3 watchdog kills all launcher forms + suite-wide STOP guards + lib.sh +
+  require-context.sh; selftest.sh ALL PASS (debugged env-vs-positional bug).
+- H5 tick-count schedule + Truncated + accounting invariant + 2 tests.
+- H6 threshold-parameterized bucket + float-preserving gate + Estimated flag
+  + 2 tests. H8 FastBurn/TicketBurn split per SLI + long-ticket fixture (10/10).
+- H7 truthful make targets; smoke requires Successful>0 + 2 tests.
+- D1 writeResult errors + CLI test; D2 missing-bucket test fixed.
+- Full-window in-kind suite 9/9 (rate 25 × 330s, coverage enforced):
+  healthy 3 PASS, error 3 FAIL, slow 3 FAIL, zero INCONCLUSIVE. Watchdog idle.
+- Prior results relabeled preliminary short-window in SUMMARY.md.
+- Lab scaled back to 0; disk steady 6.9Gi; no deletions.

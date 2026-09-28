@@ -78,6 +78,22 @@ groups:
     for: 2m
     labels:
       severity: page
+  - alert: ReservationsAvailabilityTicketBurn
+    expr: |
+      (
+        (service:availability_bad_ratio:6h > 6 * 0.0010000000000000009)
+        and on(service)
+        (service:availability_bad_ratio:30m > 6 * 0.0010000000000000009)
+      )
+      or on(service)
+      (
+        (service:availability_bad_ratio:3d > 1 * 0.0010000000000000009)
+        and on(service)
+        (service:availability_bad_ratio:6h > 1 * 0.0010000000000000009)
+      )
+    for: 2m
+    labels:
+      severity: ticket
   - alert: ReservationsLatencyFastBurn
     expr: |
       (
@@ -85,9 +101,31 @@ groups:
         and on(service)
         (service:latency_bad_ratio:5m > 14.4 * 0.010000000000000009)
       )
+      or on(service)
+      (
+        (service:latency_bad_ratio:6h > 6 * 0.010000000000000009)
+        and on(service)
+        (service:latency_bad_ratio:30m > 6 * 0.010000000000000009)
+      )
     for: 2m
     labels:
       severity: page
+  - alert: ReservationsLatencyTicketBurn
+    expr: |
+      (
+        (service:latency_bad_ratio:6h > 6 * 0.010000000000000009)
+        and on(service)
+        (service:latency_bad_ratio:30m > 6 * 0.010000000000000009)
+      )
+      or on(service)
+      (
+        (service:latency_bad_ratio:3d > 1 * 0.010000000000000009)
+        and on(service)
+        (service:latency_bad_ratio:6h > 1 * 0.010000000000000009)
+      )
+    for: 2m
+    labels:
+      severity: ticket
   - alert: LabTelemetryMissing
     expr: |
       absent(sum by (service) (rate(lab_requests_total{service="reservations"}[5m])))

@@ -121,16 +121,17 @@ func status(args []string) (int, error) {
 	cl := telemetry.New(prom)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	stable, cand, notes, err := budgetguard.FetchCounts(ctx, cl, cfg, end)
+	f, err := budgetguard.FetchCounts(ctx, cl, cfg, end)
 	if err != nil {
 		fmt.Println("INCONCLUSIVE:", err)
 		return 3, nil
 	}
-	res := budgetguard.Decide(cfg, end, stable, cand)
+	res := budgetguard.DecideCounts(cfg, end, f.Stable, f.Candidate,
+		f.DisplayStable, f.DisplayCandidate, f.Estimated)
 	raw, _ := json.MarshalIndent(res, "", "  ")
 	fmt.Println(string(raw))
-	if len(notes) > 0 {
-		fmt.Println("notes:", notes)
+	if len(f.Notes) > 0 {
+		fmt.Println("notes:", f.Notes)
 	}
 	return exitFor(res.Decision), nil
 }
@@ -165,16 +166,21 @@ func evaluate(args []string) (int, error) {
 	cl := telemetry.New(prom)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	stable, cand, _, err := budgetguard.FetchCounts(ctx, cl, cfg, end)
+	f, err := budgetguard.FetchCounts(ctx, cl, cfg, end)
 	if err != nil {
 		res := budgetguard.Result{SchemaVersion: 1, Decision: "INCONCLUSIVE",
 			Reasons:         []string{"telemetry_error:" + err.Error()},
 			HistoryComplete: false, PolicyHash: budgetguard.ConfigHash(cfg)}
-		writeResult(out, res)
+		if werr := writeResult(out, res); werr != nil {
+			return 1, werr
+		}
 		return 3, nil
 	}
-	res := budgetguard.Decide(cfg, end, stable, cand)
-	writeResult(out, res)
+	res := budgetguard.DecideCounts(cfg, end, f.Stable, f.Candidate,
+		f.DisplayStable, f.DisplayCandidate, f.Estimated)
+	if werr := writeResult(out, res); werr != nil {
+		return 1, werr
+	}
 	return exitFor(res.Decision), nil
 }
 
@@ -210,18 +216,25 @@ func replay(args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	writeResult(out, res)
+	if werr := writeResult(out, res); werr != nil {
+		return 1, werr
+	}
 	return exitFor(res.Decision), nil
 }
 
-func writeResult(out string, res budgetguard.Result) {
+func writeResult(out string, res budgetguard.Result) error {
 	raw, _ := json.MarshalIndent(res, "", "  ")
 	if out == "" {
 		fmt.Println(string(raw))
-		return
+		return nil
 	}
-	_ = os.WriteFile(out, append(raw, '\n'), 0o644)
+	// D1: file errors propagate — a decision printed to stdout while the
+	// file silently fails would corrupt the evidence chain.
+	if err := os.WriteFile(out, append(raw, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", out, err)
+	}
 	fmt.Println("decision:", res.Decision, "→", out)
+	return nil
 }
 
 func exitFor(d string) int {

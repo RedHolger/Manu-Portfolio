@@ -50,16 +50,20 @@ func New(baseURL string) *Client {
 		MaxBody: 4 << 20}
 }
 
-// QueryRange runs an instant or range query at time `at` (step for ranges).
-// Rejects: non-200, error status, warnings mentioning partial results,
-// NaN/Inf samples, empty metric names.
+// QueryRange runs a range query over [at-step, at] (short diagnostic window).
 func (c *Client) QueryRange(ctx context.Context, expr string, at time.Time, step time.Duration) ([]Series, error) {
+	return c.QueryMatrix(ctx, expr, at.Add(-step), at, step)
+}
+
+// QueryMatrix runs an explicit range query. All responses — instant, range,
+// or matrix — pass the same envelope + sample validation (H2: the release
+// gate's instant path previously skipped both checks).
+func (c *Client) QueryMatrix(ctx context.Context, expr string, start, end time.Time, step time.Duration) ([]Series, error) {
 	u, _ := url.Parse(c.BaseURL + "/api/v1/query_range")
-	// NOTE: real range path; instant queries use /api/v1/query via Query().
 	q := u.Query()
 	q.Set("query", expr)
-	q.Set("start", strconv.FormatInt(at.Add(-step).Unix(), 10))
-	q.Set("end", strconv.FormatInt(at.Unix(), 10))
+	q.Set("start", strconv.FormatInt(start.Unix(), 10))
+	q.Set("end", strconv.FormatInt(end.Unix(), 10))
 	q.Set("step", step.String())
 	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
@@ -82,26 +86,49 @@ func (c *Client) QueryRange(ctx context.Context, expr string, at time.Time, step
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
+	if err := checkEnvelope(&env); err != nil {
+		return nil, err
+	}
+	if err := checkSamples(env.Data.Result); err != nil {
+		return nil, err
+	}
+	return env.Data.Result, nil
+}
+
+// checkEnvelope rejects error statuses and partial-result warnings.
+func checkEnvelope(env *QueryResponse) error {
 	if env.Status != "success" {
-		return nil, fmt.Errorf("prometheus error: %s", env.Error)
+		return fmt.Errorf("prometheus error: %s", env.Error)
 	}
 	for _, w := range env.Warnings {
 		if containsPartial(w) {
-			return nil, fmt.Errorf("partial results warning: %s", w)
+			return fmt.Errorf("partial results warning: %s", w)
 		}
 	}
-	for _, s := range env.Data.Result {
-		for _, v := range s.Values {
+	return nil
+}
+
+// checkSamples rejects NaN/Inf in both matrix (Values) and vector (Value)
+// forms. Instant-query callers previously skipped this (H2).
+// NOTE: Value is a fixed [2]any, so absence is detected by nil elements,
+// not length — appending the zero value would reject every matrix response.
+func checkSamples(series []Series) error {
+	for _, s := range series {
+		vals := s.Values
+		if s.Value[0] != nil || s.Value[1] != nil {
+			vals = append(vals, s.Value)
+		}
+		for _, v := range vals {
 			f, err := sampleFloat(v[1])
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if math.IsNaN(f) || math.IsInf(f, 0) {
-				return nil, errors.New("NaN/Inf sample rejected")
+				return errors.New("NaN/Inf sample rejected")
 			}
 		}
 	}
-	return env.Data.Result, nil
+	return nil
 }
 
 // Query runs an instant query (used for freshness checks).
@@ -131,8 +158,11 @@ func (c *Client) Query(ctx context.Context, expr string, at time.Time) ([]Series
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, err
 	}
-	if env.Status != "success" {
-		return nil, fmt.Errorf("prometheus error: %s", env.Error)
+	if err := checkEnvelope(&env); err != nil {
+		return nil, err
+	}
+	if err := checkSamples(env.Data.Result); err != nil {
+		return nil, err
 	}
 	return env.Data.Result, nil
 }

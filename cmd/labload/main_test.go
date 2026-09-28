@@ -5,6 +5,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -45,5 +47,31 @@ func TestParseRunOptionsRejectsNonPositive(t *testing.T) {
 	}
 	if _, err := parseRunOptions([]string{"--duration", "0s"}); err == nil {
 		t.Fatal("duration 0 must be rejected")
+	}
+}
+
+// H7 regression: smoke must fail when every request fails (completed
+// attempts alone once passed an all-failing service).
+func TestSmokeFailsWhenAllFail(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.Body.Close()
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"x"}`))
+	}))
+	defer s.Close()
+	if code := runSmoke([]string{"--gateway", s.URL}); code == 0 {
+		t.Fatal("smoke passed against an all-failing service")
+	}
+}
+
+func TestSmokePassesWhenHealthy(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.Body.Close()
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer s.Close()
+	if code := runSmoke([]string{"--gateway", s.URL}); code != 0 {
+		t.Fatalf("smoke failed against healthy service: %d", code)
 	}
 }

@@ -42,8 +42,14 @@ type Summary struct {
 	AchievedRPS                                        float64
 	LatP50Ms, LatP95Ms, LatP99Ms                       float64
 	TransportErrors                                    int
+	Successful                                         int    // 2xx completions (smoke gate)
 	Valid                                              bool   // false if drop>1% or saturation
 	InvalidReason                                      string `json:",omitempty"`
+	// Truncated reports that the deadline ended the schedule before all n
+	// planned ticks fired. Without this bound, dropped launches were
+	// retried on later ticks and a configured duration silently extended
+	// under overload (H5). Invariant: Offered == Launched + Dropped.
+	Truncated bool
 }
 
 // Config for a run.
@@ -79,7 +85,7 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var attempts []Attempt
-	var launched, completed, dropped, transportErrs int
+	var launched, completed, dropped, transportErrs, successful int
 	var lags, lats []float64
 
 	for w := 0; w < cfg.Workers; w++ {
@@ -99,6 +105,9 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 				if att.ErrClass == "transport" || att.ErrClass == "timeout" {
 					transportErrs++
 				}
+				if att.Code >= 200 && att.Code < 300 {
+					successful++
+				}
 				attempts = append(attempts, att)
 				mu.Unlock()
 				if rn.Out != nil {
@@ -109,19 +118,27 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 		}()
 	}
 	start := time.Now()
-	scheduled := 0
+	// The schedule ends by COUNT (every fired tick counts, enqueued or
+	// dropped): drops are reported via Valid=false, never by stretching the
+	// run. The deadline is only a stall guard (suspended clock, wedged
+	// ticker) set far beyond any honest schedule.
+	deadline := start.Add(cfg.Duration + 30*time.Second)
+	ticked := 0
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 Loop:
-	for scheduled < n {
+	for ticked < n {
 		select {
 		case <-ctx.Done():
 			break Loop
 		case planned := <-tick.C:
-			opID := fmt.Sprintf("op-%d-%d", cfg.Seed, scheduled)
+			if planned.After(deadline) {
+				break Loop
+			}
+			ticked++
+			opID := fmt.Sprintf("op-%d-%d", cfg.Seed, ticked)
 			select {
-			case jobs <- job{opID: opID, n: scheduled, planned: planned, seed: cfg.Seed}:
-				scheduled++
+			case jobs <- job{opID: opID, n: ticked, planned: planned, seed: cfg.Seed}:
 			default:
 				mu.Lock()
 				dropped++
@@ -134,10 +151,12 @@ Loop:
 	el := time.Since(start)
 
 	sum := Summary{
-		Offered: scheduled + (n - scheduled), Launched: launched,
-		Completed: completed, Dropped: dropped + (n - scheduled),
+		Offered: ticked, Launched: launched,
+		Completed: completed, Dropped: dropped,
 		Outstanding: launched - completed, TransportErrors: transportErrs,
+		Successful:  successful,
 		AchievedRPS: float64(completed) / el.Seconds(),
+		Truncated:   ticked < n,
 	}
 	sort.Float64s(lags)
 	sort.Float64s(lats)
@@ -147,10 +166,13 @@ Loop:
 	sum.LatP95Ms = pct(lats, 95)
 	sum.LatP99Ms = pct(lats, 99)
 	sum.Valid = true
-	if n > 0 && float64(sum.Dropped)/float64(n) > 0.01 {
+	if sum.Offered == 0 {
+		sum.Valid = false
+		sum.InvalidReason = "no ticks fired within duration"
+	} else if float64(sum.Dropped)/float64(sum.Offered) > 0.01 {
 		sum.Valid = false
 		sum.InvalidReason = fmt.Sprintf("drop rate %.2f%% > 1%%",
-			100*float64(sum.Dropped)/float64(n))
+			100*float64(sum.Dropped)/float64(sum.Offered))
 	}
 	return sum, nil
 }

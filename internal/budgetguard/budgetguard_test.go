@@ -134,7 +134,7 @@ func TestFailuresCountedOnce(t *testing.T) {
 func TestGateBoundaries(t *testing.T) {
 	g := ReleaseGate{MinRequestsPerSlot: 1000, MaxErrorRate: 0.01,
 		MaxErrorRateIncrease: 0.005, MaxSlowRate: 0.02, MaxSlowRateIncrease: 0.01}
-	mk := func(elig, bad, slowBad int64) Counts {
+	mk := func(elig, bad, slowBad float64) Counts {
 		return Counts{Eligible: elig, Good: elig - bad, FastGood: elig - slowBad}
 	}
 	// Exact boundary equality PASSES.

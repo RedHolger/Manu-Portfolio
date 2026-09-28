@@ -7,6 +7,11 @@
 // availability = G_avail / N ; latencySLI = G_lat / N
 // bad_ratio = 1 - good/N ; burn = bad_ratio / (1-target)
 // allowed_bad = N*(1-target) ; remaining = 1 - bad/allowed_bad (may be <0)
+//
+// Counts are float64 because Prometheus increase() extrapolates fractional
+// values. Gate comparisons use the RAW fractions: rounding before comparing
+// can flip boundary decisions (H6). Integer display rounding happens only
+// at the JSON report edge, flagged via Result.Estimated.
 package budgetguard
 
 import (
@@ -15,9 +20,9 @@ import (
 
 // Counts is one slot's observed population over a window.
 type Counts struct {
-	Eligible int64 // N
-	Good     int64 // successful eligible (availability good)
-	FastGood int64 // successful eligible within threshold (latency good)
+	Eligible float64 // N
+	Good     float64 // successful eligible (availability good)
+	FastGood float64 // successful eligible within threshold (latency good)
 }
 
 // SLIResult carries values or UNKNOWN.
@@ -35,7 +40,7 @@ type SLIResult struct {
 	WhyUnknown            string
 }
 
-// Evaluate computes both SLIs. N=0, negative inputs, or nonfinite values
+// Evaluate computes both SLIs. N<=0, negative inputs, or nonfinite values
 // yield UNKNOWN — never 100% (no-traffic is not perfect availability).
 func Evaluate(c Counts, availTarget, latTarget float64) SLIResult {
 	if c.Eligible <= 0 {
@@ -45,17 +50,17 @@ func Evaluate(c Counts, availTarget, latTarget float64) SLIResult {
 		return SLIResult{Unknown: true, WhyUnknown: "inconsistent counts (good<=eligible, fast<=good required)"}
 	}
 	r := SLIResult{
-		Availability:    float64(c.Good) / float64(c.Eligible),
-		Latency:         float64(c.FastGood) / float64(c.Eligible),
-		AllowedBadAvail: float64(c.Eligible) * (1 - availTarget),
-		AllowedBadLat:   float64(c.Eligible) * (1 - latTarget),
+		Availability:    c.Good / c.Eligible,
+		Latency:         c.FastGood / c.Eligible,
+		AllowedBadAvail: c.Eligible * (1 - availTarget),
+		AllowedBadLat:   c.Eligible * (1 - latTarget),
 	}
 	r.BadRatioAvail = 1 - r.Availability
 	r.BadRatioLat = 1 - r.Latency
 	r.BurnAvail = r.BadRatioAvail / (1 - availTarget)
 	r.BurnLat = r.BadRatioLat / (1 - latTarget)
-	badAvail := float64(c.Eligible - c.Good)
-	badLat := float64(c.Eligible - c.FastGood)
+	badAvail := c.Eligible - c.Good
+	badLat := c.Eligible - c.FastGood
 	// Latency is joint success-and-speed: a failure counts as bad once
 	// (FastGood already excludes failures — never add them again).
 	r.RemainingAvail = 1 - badAvail/r.AllowedBadAvail
@@ -73,18 +78,18 @@ func Evaluate(c Counts, availTarget, latTarget float64) SLIResult {
 func GateDecision(stable, cand Counts, g ReleaseGate) (string, []string) {
 	var reasons []string
 	add := func(s string) { reasons = append(reasons, s) }
-	if stable.Eligible < g.MinRequestsPerSlot || cand.Eligible < g.MinRequestsPerSlot {
+	if stable.Eligible < float64(g.MinRequestsPerSlot) || cand.Eligible < float64(g.MinRequestsPerSlot) {
 		add("insufficient_traffic")
 		return "INCONCLUSIVE", reasons
 	}
-	serr := float64(stable.Eligible-stable.Good) / float64(stable.Eligible)
-	serrSlow := float64(stable.Eligible-stable.FastGood) / float64(stable.Eligible)
+	serr := (stable.Eligible - stable.Good) / stable.Eligible
+	serrSlow := (stable.Eligible - stable.FastGood) / stable.Eligible
 	if serr > g.MaxErrorRate || serrSlow > g.MaxSlowRate {
 		add("baseline_unhealthy")
 		return "INCONCLUSIVE", reasons // never blame candidate for shared failure
 	}
-	cerr := float64(cand.Eligible-cand.Good) / float64(cand.Eligible)
-	cerrSlow := float64(cand.Eligible-cand.FastGood) / float64(cand.Eligible)
+	cerr := (cand.Eligible - cand.Good) / cand.Eligible
+	cerrSlow := (cand.Eligible - cand.FastGood) / cand.Eligible
 	fail := false
 	if cerr > g.MaxErrorRate {
 		add("candidate_error_rate_exceeded")

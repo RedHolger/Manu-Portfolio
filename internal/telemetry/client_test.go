@@ -69,3 +69,29 @@ func TestSumIncreaseFlagsFractional(t *testing.T) {
 		t.Fatal("integer sums must not be flagged estimated")
 	}
 }
+
+// H2 regression: the instant Query path (used by the release gate) must
+// apply the same warning + NaN/Inf validation as the range path.
+func TestInstantQueryRejectsPartialWarning(t *testing.T) {
+	s := fakeServer(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1,"7"]}]},"warnings":["partial result: thanos"]} `, 200)
+	defer s.Close()
+	if _, err := New(s.URL).Query(context.Background(), "up", time.Now()); err == nil {
+		t.Fatal("expected partial-warning rejection on instant path")
+	}
+}
+
+func TestInstantQueryRejectsNaN(t *testing.T) {
+	s := fakeServer(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1,"NaN"]}]}}`, 200)
+	defer s.Close()
+	if _, err := New(s.URL).Query(context.Background(), "up", time.Now()); err == nil {
+		t.Fatal("expected NaN rejection on instant path")
+	}
+}
+
+func TestInstantQueryRejectsInf(t *testing.T) {
+	s := fakeServer(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1,"+Inf"]}]}}`, 200)
+	defer s.Close()
+	if _, err := New(s.URL).Query(context.Background(), "up", time.Now()); err == nil {
+		t.Fatal("expected +Inf rejection on instant path")
+	}
+}

@@ -1,5 +1,11 @@
 # Results summary — native vs kind, reported separately
 
+> **Window-status labels (added on the correctness-fix branch):** all runs
+> through 2026-09-27 are **preliminary short-window evidence** (80–150s of
+> traffic evaluated over a 300s window — the coverage gate did not exist).
+> `results/budgetguard/kind-fullwindow-20260928T011047Z/` holds the first
+> **full-window acceptance evidence** (330s runs, coverage gate enforced).
+
 Contaminated runs (excluded from all benchmark counts, preserved as evidence):
 - kind `error-222.*`: 35-minute disk-stall crawl, killed load, INCONCLUSIVE.
 - native slow single: overlapping 300s window with prior error run (correct
@@ -38,6 +44,16 @@ restart. Same load shape as Group A.
 | error seed 333 | — | 1 caveat (98.6% complete, 1017/56) | — |
 | error seed 222 | — | — | EXCLUDED (contaminated, see above) |
 | error seed 444 | — | — | EXCLUDED (incomplete, halted) |
+
+## Group C — kind full-window acceptance (NEW, correctness-fix branch)
+`results/budgetguard/kind-fullwindow-20260928T011047Z/` · rate 25 × 330s,
+per-rep isolation, coverage gate enforced, watchdog armed (never tripped).
+
+| actual | PASS | FAIL | INCONCLUSIVE |
+|---|---|---|---|
+| healthy (1001–1003) | 3 (cand 1446–1612) | — | — |
+| error (1001–1003) | — | 3 (cand ≈5% bad) | — |
+| slow (1001–1003) | — | 3 (100% slow, 0 errors) | — |
 
 ## Class totals toward 10/class (exact valid counts — FINAL)
 - healthy: 5 native PASS + 5 kind PASS = **10 ✓ COMPLETE**

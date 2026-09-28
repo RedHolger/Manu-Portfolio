@@ -141,6 +141,25 @@ tests:
         alertname: LabTelemetryMissing
         exp_alerts: []
 
+  - interval: 10m
+    name: slow multi-day burn — ticket fires, fast-burn stays silent
+    input_series:
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="success"}'
+        values: 0+199x432
+      - series: 'lab_requests_total{service="reservations",slot="candidate",route="/v1/reservations",result="server_error"}'
+        values: 0+1x432
+    alert_rule_test:
+      - eval_time: 3d
+        alertname: ReservationsAvailabilityTicketBurn
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: reservations
+            exp_annotations: {}
+      - eval_time: 3d
+        alertname: ReservationsAvailabilityFastBurn
+        exp_alerts: []
+
   - interval: 1m
     name: missing series — telemetry alert, no burn page
     input_series:

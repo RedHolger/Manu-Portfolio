@@ -13,7 +13,7 @@
     "github.com/jackc/pgx/v5": "v5.11.0 (go.mod, measured)"
   },
   "local_binaries": {
-    "sre-labapi:local": "sha256:8136262b83c2a394600ce2bd891648d0a98c66ca4a9a11912e5f33db40d947b8",
-    "sre-labgateway:local": "sha256:b8d0d4b1e35bf44f8c1ba96a3aa295475b2b795e388bdc65cec751fddd1c6628"
+    "sre-labapi:local": "docker sha256:10a5df08c93643658f71285761f974fbed0fcea6e9ed000cdb45922575acc2c8 = node sha256:99319fbc5e4fa (kind load re-manifests on import)",
+    "sre-labgateway:local": "docker sha256:f88bebfec09a29c2aab2f1c33ef469564b4c4ee824e120cddd26fe440ba0d625 = node sha256:16b371dbd7953"
   }
 }

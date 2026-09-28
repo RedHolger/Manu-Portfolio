@@ -28,7 +28,7 @@ lint:
 
 test-rules:
 	promtool check rules monitoring/generated-rules.yaml
-	promtool test --test-file=monitoring/rule-tests.yaml monitoring/generated-rules.yaml
+	promtool test rules monitoring/rule-tests.yaml
 
 lab-up:
 	kubectl config use-context $(KIND_CONTEXT)
@@ -39,7 +39,7 @@ smoke:
 	go run ./cmd/labload smoke --seed 1
 
 test-workload:
-	go test -run 'TestWorkload|TestAmbiguous|TestConcurrency' ./internal/workload/... -v
+	go test -run 'TestUnique|TestDuplicate|TestConflicting|TestAmbiguous|TestValidation|TestPostgres' ./internal/workload/... -v
 
 test-integration:
 	go test -tags integration ./internal/... -v

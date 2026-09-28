@@ -119,21 +119,30 @@ func run(args []string) {
 }
 
 func smoke(args []string) {
-	fs := flag.NewFlagSet("smoke", flag.ExitOnError)
+	os.Exit(runSmoke(args))
+}
+
+// runSmoke returns the smoke exit code (H7: completed attempts are not
+// enough — at least one must SUCCEED, or an all-failing service smokes OK).
+func runSmoke(args []string) int {
+	fs := flag.NewFlagSet("smoke", flag.ContinueOnError)
 	base := fs.String("gateway", "http://127.0.0.1:8080", "gateway base URL")
 	seed := fs.Int64("seed", 1, "seed")
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 	if fs.NArg() > 0 {
 		fmt.Fprintln(os.Stderr, "smoke: unexpected args", fs.Args())
-		os.Exit(2)
+		return 2
 	}
 	rn := &loadgen.Runner{BaseURL: *base, Out: os.Stdout}
 	sum, err := rn.Run(context.Background(), loadgen.Config{
 		Rate: 2, Duration: 3 * time.Second, Seed: *seed, Timeout: 2 * time.Second,
 	})
-	if err != nil || sum.Completed == 0 {
+	if err != nil || sum.Successful == 0 {
 		fmt.Fprintln(os.Stderr, "smoke FAILED")
-		os.Exit(1)
+		return 1
 	}
-	fmt.Printf("smoke OK completed=%d p50=%.1fms\n", sum.Completed, sum.LatP50Ms)
+	fmt.Printf("smoke OK successful=%d p50=%.1fms\n", sum.Successful, sum.LatP50Ms)
+	return 0
 }

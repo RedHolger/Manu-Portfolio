@@ -27,10 +27,19 @@ func TestCompileHasMultiwindowAlerts(t *testing.T) {
 		"service:availability_bad_ratio:5m > 14.4",
 		"service:availability_bad_ratio:6h > 6",
 		"service:availability_bad_ratio:30m > 6",
+		"service:availability_bad_ratio:3d > 1",
+		"service:availability_bad_ratio:6h > 1",
 		"service:latency_bad_ratio:1h",
+		"service:latency_bad_ratio:6h > 6",
+		"service:latency_bad_ratio:3d > 1",
+		"ReservationsAvailabilityFastBurn",
+		"ReservationsAvailabilityTicketBurn",
+		"ReservationsLatencyFastBurn",
+		"ReservationsLatencyTicketBurn",
 		"LabTelemetryMissing",
 		"absent(",
 		"severity: page",
+		"severity: ticket",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("compiled rules missing %q", want)

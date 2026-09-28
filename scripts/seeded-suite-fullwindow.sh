@@ -9,7 +9,7 @@ PROM=http://127.0.0.1:9090
 GW=http://127.0.0.1:8080
 CFG=configs/slos/reservations.yaml
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-OUT="results/budgetguard/kind-resume-$TS"
+OUT="results/budgetguard/kind-fullwindow-$TS"
 mkdir -p "$OUT"
 export LAB_ADMIN_TOKEN="$(cat .admin-token.env)"
 . ./scripts/lib.sh
@@ -59,7 +59,7 @@ run_rep() { # run_rep <class> <seed> [extra flags]
   fresh_prom
   fresh_gateway
   sleep 10
-  go run ./cmd/labload run --gateway "$GW" --rate 70 --duration 80s \
+  go run ./cmd/labload run --gateway "$GW" --rate 25 --duration 330s \
     --seed "$2" --output "$OUT/$1-$2.jsonl" --summary "$OUT/$1-$2.summary.json" ${3:-}
   if [ -f "$OUT/STOP" ]; then echo "WATCHDOG STOP after $1 $2" | tee -a "$OUT/failures.log"; return 2; fi
   END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -73,15 +73,14 @@ go build -o scripts/budgetguard-bin ./cmd/budgetguard 2>/dev/null
 echo $! > "$OUT/watchdog.pid"
 
 set_mode error
-for seed in 777 888; do run_rep error "$seed" || break; done
+for seed in 1001 1002 1003; do run_rep error "$seed" || break; done
 halted "$OUT" || {
 set_mode slow
-for seed in 111 222 333 444 555; do run_rep slow "$seed" || break; done
+for seed in 1001 1002 1003; do run_rep slow "$seed" || break; done
 }
 halted "$OUT" || {
 set_mode healthy
-# Client-error verification: 10% invalid traffic must still PASS (excluded).
-run_rep clienterror 4242 --invalid-fraction=0.1 || true
+for seed in 1001 1002 1003; do run_rep healthy "$seed" || break; done
 }
 halted "$OUT" && echo "SUITE HALTED by STOP — outcomes preserved" >> "$OUT/failures.log"
 set_mode healthy
@@ -101,14 +100,14 @@ for p in sorted(d.glob("*.decision.json")):
     matrix.setdefault(cls, {}).setdefault(r["decision"], []).append(
         f"{p.name} cand={r['candidate']['eligible']}/{r['candidate']['bad']}/{r['candidate']['slow_or_bad']}")
 lines = ["# Kind resume suite — confusion matrix", "",
-         "error x2 + slow x5 + clienterror x1 (kind-sre-lab), INCONCLUSIVE kept separate", "",
+         "full-window: 3 seeds x healthy/error/slow, rate 25 x 330s, kind-sre-lab", "",
          "| actual \\ predicted | PASS | FAIL | INCONCLUSIVE |",
          "|---|---|---|---|"]
-for cls in ["error", "slow", "clienterror"]:
+for cls in ["healthy", "error", "slow"]:
     row = matrix.get(cls, {})
     fmt = lambda k: "; ".join(sorted(row.get(k, []))) or "—"
     lines.append(f"| {cls} | {fmt('PASS')} | {fmt('FAIL')} | {fmt('INCONCLUSIVE')} |")
 (d / "matrix.md").write_text("\n".join(lines) + "\n")
 print("\n".join(lines))
 EOF
-echo "resume complete → $OUT"
+echo "full-window suite complete → $OUT"

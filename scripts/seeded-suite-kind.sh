@@ -81,10 +81,15 @@ echo $! > "$OUT/watchdog.pid"
 
 set_mode healthy
 for seed in 111 222 333 444 555; do run_rep healthy "$seed" || break; done
+halted "$OUT" || {
 set_mode error
 for seed in 111 222 333 444 555; do run_rep error "$seed" || break; done
+}
+halted "$OUT" || {
 set_mode slow
 for seed in 111 222 333 444 555; do run_rep slow "$seed" || break; done
+}
+halted "$OUT" && echo "SUITE HALTED by STOP — outcomes preserved" >> "$OUT/failures.log"
 set_mode healthy
 adm_stop; pgfwd_stop
 kill "$(cat "$OUT/watchdog.pid")" 2>/dev/null
