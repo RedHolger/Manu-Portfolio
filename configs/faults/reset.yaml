@@ -1,0 +1,31 @@
+apiVersion: portfolio.sre/v1
+kind: FaultExperiment
+metadata:
+  name: conn-reset
+spec:
+  context: kind-sre-lab
+  namespace: sre-lab
+  target:
+    service: reservations
+    slot: candidate
+  workload:
+    rate: 50
+    seed: 7
+    timeoutSeconds: 2
+  phases:
+    baselineSeconds: 30
+    faultSeconds: 45
+    recoverySeconds: 60
+  fault:
+    type: conn_fail
+    delayMilliseconds: 0
+    fraction: 0.3
+    ttlSeconds: 60
+  abort:
+    maxFailureRatio: 0.50
+    consecutiveWindows: 2
+    windowSeconds: 5
+  assertions:
+    duplicateReservations: 0
+    negativeInventory: false
+    recoveryDeadlineSeconds: 120

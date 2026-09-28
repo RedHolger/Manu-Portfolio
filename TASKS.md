@@ -232,3 +232,19 @@
   healthy 3 PASS, error 3 FAIL, slow 3 FAIL, zero INCONCLUSIVE. Watchdog idle.
 - Prior results relabeled preliminary short-window in SUMMARY.md.
 - Lab scaled back to 0; disk steady 6.9Gi; no deletions.
+
+## Session: FaultLab F1–F2 start (faultlab-dev from cad2f7e)
+- HANDOFF.md checkpoint written. Tree was clean; no uncommitted work to preserve.
+- BudgetGuard external review + 10-per-class top-ups: PENDING (not completed).
+- Disk 2.9GiB at branch time; floor 2GB + watchdog carry over to F2 demos.
+
+## Session: FaultLab F1 complete (faultlab-dev)
+- Strict FaultExperiment schema (unknown/dup rejected; context+namespace
+  enforced; pod_delete explicitly deferred to F3; TTL/duration/fraction bounds).
+- SQLite journal (modernc v1.59.0, WAL, single-writer): intent-before-mutation
+  rows, CAS transitions with events, service lock, terminal lock release,
+  reopen durability. State machine with exact-transition tests.
+- Fake clock (advance/waiters) + fake injector (record/script errors).
+- CLI: validate + plan (target/workload/phases/fault/abort/cleanup/permissions).
+  run/status/cleanup/reconcile/report intentionally absent until F2.
+- `go test ./...` all green. Disk 2.6GiB (sqlite module cost ~300MB).
