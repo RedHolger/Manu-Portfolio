@@ -5,9 +5,9 @@
 # across ~9 in-kind reps on 2026-09-27). Start suites with >=2GB free AND
 # keep this floor armed between reps; the suite scripts call this before
 # every rep and abort (preserving outcomes) on violation.
-# Usage: MIN_GB=1 ./scripts/disk-floor.sh
+# Usage: ./scripts/disk-floor.sh  (default floor 2GiB; MIN_GB env overrides)
 set -u
-MIN_GB="${MIN_GB:-1}"
+MIN_GB="${MIN_GB:-2}"
 free_gb=$(python3 -c 'import shutil; print(round(shutil.disk_usage("/").free / 1e9, 2))')
 ok=$(python3 -c "print('yes' if float('$free_gb') >= float('$MIN_GB') else 'no')")
 if [ "$ok" != "yes" ]; then

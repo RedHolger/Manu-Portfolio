@@ -6,6 +6,7 @@ package faultlab
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -21,6 +22,11 @@ type Runner struct {
 	Gateway  string // public base URL for load + metrics
 	OutDir   string
 
+	// Pods enables pod_delete faults; Dep enables dependency_failure faults.
+	// Nil backends reject their kinds BEFORE any mutation (no journal row).
+	Pods *PodDeleter
+	Dep  DepFaultCtl
+
 	// CheckContext verifies the kube context before any mutation.
 	// Defaults to a kubectl lookup; tests inject fakes.
 	CheckContext func(ctx context.Context) error
@@ -29,12 +35,39 @@ type Runner struct {
 	CleanupCap  time.Duration
 }
 
+// slotDeployment maps experiment slots to lab Deployments.
+var slotDeployment = map[string]string{"stable": "api-stable", "candidate": "api-candidate"}
+
+// backendFor validates the required backend exists for the fault kind,
+// before any journal row or lock is created.
+func (r *Runner) backendFor(kind string) error {
+	switch kind {
+	case FaultDelay, FaultConnFail:
+		return nil // gateway Injector always configured
+	case FaultPodDelete:
+		if r.Pods == nil {
+			return fmt.Errorf("pod faults need Pods configured (--kubeconfig)")
+		}
+		return nil
+	case FaultDepOutage:
+		if r.Dep == nil {
+			return fmt.Errorf("dependency faults need Dep configured (--api-admin)")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported fault kind %q", kind)
+	}
+}
+
 // faultIDFor derives the single fault ID for a run.
 func faultIDFor(runID string) string { return runID + "-f1" }
 
 // Run executes the full lifecycle, returning the terminal state.
 func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, error) {
 	j := r.Journal
+	if err := r.backendFor(sc.FaultKind); err != nil {
+		return "", err // unsupported kind: no journal row, no lock, no mutation
+	}
 	deadline := time.Now().Add(time.Duration(sc.Baseline+sc.FaultSecs+sc.Recover+120) * time.Second)
 	if err := j.CreateRun(runID, sc.Name, sc.Service, sc.Seed, deadline); err != nil {
 		return "", err // locked or duplicate: no mutation attempted
@@ -89,25 +122,11 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 		return terminal, err
 	}
 
-	in := Injection{ID: faultIDFor(runID), Kind: sc.FaultKind, Slot: sc.Slot,
-		DelayMs: sc.DelayMs, Fraction: sc.Fraction, TTL: sc.TTL}
-	if err := j.RecordFault(runID, in.ID, in.Kind,
-		fmt.Sprintf(`{"slot":%q,"fraction":%v}`, in.Slot, in.Fraction),
-		time.Now().Add(time.Duration(in.TTL)*time.Second).UTC().Format(time.RFC3339Nano)); err != nil {
-		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "journal: "+err.Error())
-		terminal = t
-		return terminal, err
-	}
-	if err := step(StInjecting, "inject", fmt.Sprintf(`{"fault":%q}`, in.ID)); err != nil {
+	if err := step(StInjecting, "inject", fmt.Sprintf(`{"kind":%q}`, sc.FaultKind)); err != nil {
 		return "", err
 	}
-	if err := r.Injector.Apply(ctx, in); err != nil {
+	if err := r.applyFault(ctx, j, runID, sc); err != nil {
 		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "apply: "+err.Error())
-		terminal = t
-		return terminal, err
-	}
-	if err := j.MarkApplied(runID, in.ID); err != nil {
-		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "journal: "+err.Error())
 		terminal = t
 		return terminal, err
 	}
@@ -115,7 +134,7 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 	if err := step(StObserving, "observe-start", "{}"); err != nil {
 		return "", err
 	}
-	outcome := r.observe(ctx, sc, in)
+	outcome := r.observe(ctx, sc)
 	if outcome != "" {
 		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, outcome)
 		terminal = t
@@ -124,6 +143,108 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 	t, verr := r.verify(context.WithoutCancel(ctx), runID, cur)
 	terminal = t
 	return terminal, verr
+}
+
+// applyFault records intent, mutates, and records application — per kind.
+func (r *Runner) applyFault(ctx context.Context, j *Journal, runID string, sc Scenario) error {
+	fid := faultIDFor(runID)
+	expires := time.Now().Add(time.Duration(sc.TTL) * time.Second).UTC().Format(time.RFC3339Nano)
+	switch sc.FaultKind {
+	case FaultDelay, FaultConnFail:
+		in := Injection{ID: fid, Kind: sc.FaultKind, Slot: sc.Slot,
+			DelayMs: sc.DelayMs, Fraction: sc.Fraction, TTL: sc.TTL}
+		if err := j.RecordFault(runID, in.ID, in.Kind,
+			fmt.Sprintf(`{"slot":%q,"fraction":%v}`, in.Slot, in.Fraction), expires); err != nil {
+			return err
+		}
+		if err := r.Injector.Apply(ctx, in); err != nil {
+			return err
+		}
+		return j.MarkApplied(runID, in.ID)
+	case FaultPodDelete:
+		dep, ok := slotDeployment[sc.Slot]
+		if !ok {
+			return fmt.Errorf("no deployment for slot %q", sc.Slot)
+		}
+		tgt, err := r.Pods.PickTarget(ctx, dep)
+		if err != nil {
+			return err
+		}
+		targetJSON := fmt.Sprintf(`{"slot":%q,"deployment":%q,"pod":%q,"uid":%q}`,
+			sc.Slot, tgt.Deployment, tgt.PodName, tgt.UID)
+		if err := j.RecordFault(runID, fid, sc.FaultKind, targetJSON, expires); err != nil {
+			return err
+		}
+		if err := r.Pods.Delete(ctx, tgt); err != nil {
+			return err
+		}
+		return j.MarkApplied(runID, fid)
+	case FaultDepOutage:
+		if err := j.RecordFault(runID, fid, sc.FaultKind,
+			fmt.Sprintf(`{"slot":%q,"ttl":%d}`, sc.Slot, sc.TTL), expires); err != nil {
+			return err
+		}
+		if err := r.Dep.SetFail(ctx, sc.TTL); err != nil {
+			return err
+		}
+		return j.MarkApplied(runID, fid)
+	default:
+		return fmt.Errorf("unsupported fault kind %q", sc.FaultKind)
+	}
+}
+
+// podTargetOf decodes a journaled pod target.
+func podTargetOf(f FaultRow) (PodTarget, error) {
+	var t struct {
+		Deployment string `json:"deployment"`
+		Pod        string `json:"pod"`
+		UID        string `json:"uid"`
+	}
+	if err := json.Unmarshal([]byte(f.TargetJSON), &t); err != nil {
+		return PodTarget{}, err
+	}
+	if t.Deployment == "" || t.Pod == "" || t.UID == "" {
+		return PodTarget{}, fmt.Errorf("fault %s missing pod target identity", f.ID)
+	}
+	return PodTarget{Deployment: t.Deployment, PodName: t.Pod, UID: t.UID}, nil
+}
+
+// clearFault removes one recorded fault and verifies its kind-specific
+// restoration. Duplicate calls are harmless (idempotent primitives).
+func (r *Runner) clearFault(ctx context.Context, runID string, f FaultRow) error {
+	switch f.Kind {
+	case FaultDelay, FaultConnFail:
+		return r.Injector.Clear(ctx, f.ID)
+	case FaultPodDelete:
+		tgt, err := podTargetOf(f)
+		if err != nil {
+			return err
+		}
+		// The pod should already be gone; if the same UID persists, one
+		// bounded re-delete with the RECORDED identity (never a fresh
+		// resolve, which could target a different pod).
+		if verr := r.Pods.VerifyGone(ctx, tgt); verr != nil {
+			if derr := r.Pods.Delete(ctx, tgt); derr != nil {
+				return derr
+			}
+			return r.Pods.VerifyGone(ctx, tgt)
+		}
+		return nil
+	case FaultDepOutage:
+		if err := r.Dep.Clear(ctx); err != nil {
+			return err
+		}
+		bad, err := r.Dep.IsFailing(ctx)
+		if err != nil {
+			return err
+		}
+		if bad {
+			return fmt.Errorf("dependency fault still active after clear")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported fault kind %q", f.Kind)
+	}
 }
 
 // load runs one workload phase.
@@ -137,7 +258,7 @@ func (r *Runner) load(ctx context.Context, sc Scenario, phase string, secs int64
 
 // observe runs fault-duration load with 1s abort/telemetry polling.
 // Returns "" on clean completion, else the reason for cleanup.
-func (r *Runner) observe(ctx context.Context, sc Scenario, in Injection) string {
+func (r *Runner) observe(ctx context.Context, sc Scenario) string {
 	type res struct {
 		sum loadgen.Summary
 		err error
@@ -200,17 +321,24 @@ func (r *Runner) toCleaning(ctx context.Context, runID, cur, reason string) (str
 		if f.ClearedAt != "" {
 			continue
 		}
-		// Duplicate cleanup is harmless (idempotent Clear).
-		if cerr := r.Injector.Clear(ctx, f.ID); cerr != nil {
+		// Kind-dispatched, idempotent cleanup (duplicate calls harmless).
+		if cerr := r.clearFault(ctx, runID, f); cerr != nil {
 			return r.markCleanupFailed(ctx, runID, cur, "clear: "+cerr.Error())
 		}
 		if merr := j.MarkCleared(runID, f.ID); merr != nil {
 			return r.markCleanupFailed(ctx, runID, cur, "journal: "+merr.Error())
 		}
 	}
-	live, err := r.Injector.Active(ctx)
-	if err != nil || len(live) != 0 {
-		msg := fmt.Sprintf("unverified restoration (live=%v err=%v)", live, err)
+	live := []string(nil)
+	var liveErr error
+	for _, f := range faults {
+		if f.Kind == FaultDelay || f.Kind == FaultConnFail {
+			live, liveErr = r.Injector.Active(ctx)
+			break
+		}
+	}
+	if liveErr != nil || len(live) != 0 {
+		msg := fmt.Sprintf("unverified restoration (live=%v err=%v)", live, liveErr)
 		return r.markCleanupFailed(ctx, runID, cur, msg)
 	}
 	if err := j.Transition(runID, StCleaning, StVerifying, "verify", "{}", ""); err != nil {
@@ -285,7 +413,7 @@ func (r *Runner) reconcileOne(ctx context.Context, run Run) error {
 		if f.ClearedAt != "" {
 			continue
 		}
-		if cerr := r.Injector.Clear(ctx, f.ID); cerr != nil {
+		if cerr := r.clearFault(ctx, run.ID, f); cerr != nil {
 			_, merr := r.forceFailed(run.ID, "reconcile clear: "+cerr.Error())
 			if merr != nil {
 				return merr
@@ -296,14 +424,25 @@ func (r *Runner) reconcileOne(ctx context.Context, run Run) error {
 			return merr
 		}
 	}
-	live, err := r.Injector.Active(ctx)
-	if err != nil || len(live) != 0 {
-		_, merr := r.forceFailed(run.ID,
-			fmt.Sprintf("reconcile unverified (live=%v err=%v)", live, err))
-		if merr != nil {
-			return merr
+	// Gateway liveness is only meaningful when gateway faults were used;
+	// pod/dep runs must not fail reconcile on an unrelated gateway outage.
+	hasGateway := false
+	for _, f := range faults {
+		if f.Kind == FaultDelay || f.Kind == FaultConnFail {
+			hasGateway = true
+			break
 		}
-		return nil
+	}
+	if hasGateway {
+		live, err := r.Injector.Active(ctx)
+		if err != nil || len(live) != 0 {
+			_, merr := r.forceFailed(run.ID,
+				fmt.Sprintf("reconcile unverified (live=%v err=%v)", live, err))
+			if merr != nil {
+				return merr
+			}
+			return nil
+		}
 	}
 	_, merr := r.forceFailed(run.ID, "interrupted (reconciled)")
 	return merr

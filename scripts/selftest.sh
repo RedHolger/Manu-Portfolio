@@ -45,5 +45,21 @@ STUB_CONTEXT="anything" SRE_CONTEXT="anything" PATH="$stub:$PATH" ./scripts/requ
 echo "ok context-override"
 rm -rf "$stub"
 
+
+# 4. Default floor is 2GiB (regression: acceptance once ran under an
+# effective 1GiB floor while notes claimed 2GB — the default must not
+# silently permit it).
+out=$(env -u MIN_GB ./scripts/disk-floor.sh 2>&1)
+case "$out" in
+  *"2GiB floor"*|*"< 2GiB"*) echo "ok floor-default-2GB" ;;
+  *) echo "FAIL: default floor changed: $out"; fails=$((fails+1)); ;;
+esac
+# A refusal at low disk still proves the 2GB default (message names it).
+out2=$(env -u MIN_GB MIN_GB=999999 ./scripts/disk-floor.sh 2>&1)
+case "$out2" in
+  *"999999GiB"*) echo "ok floor-env-override" ;;
+  *) echo "FAIL: env override broken: $out2"; fails=$((fails+1)); ;;
+esac
+
 if [ "$fails" -ne 0 ]; then echo "SELFTEST FAILURES: $fails"; exit 1; fi
 echo "SELFTEST ALL PASS"

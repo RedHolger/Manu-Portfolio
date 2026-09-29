@@ -15,19 +15,29 @@ TOKEN="$LAB_ADMIN_TOKEN"
 GWBIN=./scripts/accept-faultlab-bin
 
 ./scripts/require-context.sh || exit 1
-MIN_GB=1 ./scripts/disk-floor.sh || exit 1
-./scripts/disk-watchdog.sh "$OUT/STOP" 1 10 > "$OUT/watchdog.log" 2>&1 &
+./scripts/disk-floor.sh || exit 1
+./scripts/disk-watchdog.sh "$OUT/STOP" 2 10 > "$OUT/watchdog.log" 2>&1 &
 echo $! > "$OUT/watchdog.pid"
 stop_fwds() { pkill -f 'port-forward deploy/' 2>/dev/null; pkill -f 'port-forward svc/' 2>/dev/null; sleep 1; }
 trap stop_fwds EXIT
 
 log() { echo "[accept] $*" | tee -a "$OUT/steps.log"; }
 fail() { echo "[accept] FAIL: $*" | tee -a "$OUT/failures.log"; }
+# gate <step>: refuse every mutating step after a watchdog STOP (a single
+# upfront check cannot stop later steps from running post-breach).
+gate() {
+  if [ -f "$OUT/STOP" ]; then
+    fail "STOP present before $1 — halting, outcomes preserved"
+    exit 1
+  fi
+  ./scripts/disk-floor.sh || { fail "floor before $1"; exit 1; }
+}
 
 go build -o "$GWBIN" ./cmd/faultlab || { fail "build"; exit 1; }
 
 # 0. Refresh images (dep-fault endpoint) + manifests, scale up traffic path.
 ./scripts/build-images.sh > "$OUT/build.log" 2>&1 || { fail "build-images"; exit 1; }
+gate "apply"
 kubectl apply -k deploy/base > "$OUT/apply.log" 2>&1 || { fail "apply"; exit 1; }
 kubectl -n sre-lab create configmap prometheus-rules \
   --from-file=generated-rules.yaml=monitoring/generated-rules.yaml \
@@ -44,6 +54,7 @@ log "lab up, routing stable-only"
 
 # 1. UID-precondition pod deletion + replacement readiness.
 [ -f "$OUT/STOP" ] && { fail "stopped before pod-delete"; exit 1; }
+gate "pod-delete"
 "$GWBIN" pod-delete --deployment api-stable > "$OUT/pod-delete.json" 2>&1 || { fail "pod-delete"; exit 1; }
 cat "$OUT/pod-delete.json" | tee -a "$OUT/steps.log" | tail -2
 kubectl -n sre-lab rollout status deploy/api-stable --timeout=180s >> "$OUT/apply.log" 2>&1 || { fail "replacement ready"; exit 1; }
@@ -57,6 +68,7 @@ for POD in $(kubectl -n sre-lab get pods -l app=labapi,slot=stable -o jsonpath='
   "$GWBIN" dep-fault --api-admin http://127.0.0.1:8084 --fail --ttl 45 >> "$OUT/steps.log" 2>&1 || { fail "dep arm $POD"; exit 1; }
   pkill -f 'port-forward pod/' 2>/dev/null
 done
+gate "depfault-load"
 go run ./cmd/labload run --gateway http://127.0.0.1:8080 --rate 10 --duration 30s --seed 501 --output "$OUT/depfault-load.jsonl" --summary "$OUT/depfault-load.summary.json" >> "$OUT/steps.log" 2>&1
 python3 -c "
 import json
@@ -65,6 +77,7 @@ lines = [json.loads(l) for l in open('$OUT/depfault-load.jsonl')]
 print('during-fault codes:', dict(Counter(l['code'] for l in lines)))
 " | tee -a "$OUT/steps.log"
 sleep 25 # past TTL: lazy expiry on next request
+gate "recover-load"
 go run ./cmd/labload run --gateway http://127.0.0.1:8080 --rate 10 --duration 20s --seed 502 --output "$OUT/recover-load.jsonl" --summary "$OUT/recover-load.summary.json" >> "$OUT/steps.log" 2>&1
 python3 -c "
 import json
@@ -76,6 +89,7 @@ print('after-expiry codes:', dict(Counter(l['code'] for l in lines)))
 LASTPOD=$(kubectl -n sre-lab get pods -l app=labapi,slot=stable -o jsonpath='{.items[0].metadata.name}')
 kubectl -n sre-lab port-forward "pod/$LASTPOD" 8084:8084 > /tmp/pf-acc-api2.log 2>&1 &
 sleep 2
+gate "dep-clear"
 "$GWBIN" dep-fault --api-admin http://127.0.0.1:8084 --clear >> "$OUT/steps.log" 2>&1 || { fail "dep clear"; exit 1; }
 pkill -f 'port-forward pod/' 2>/dev/null
 
@@ -118,6 +132,7 @@ json.dump(ops, open(out + "/oracle-ops.json", "w"), indent=1)
 print("ops recorded:", len(ops), "replay same id:", rid == ops[0]["reservation_id"])
 EOF
 export PGPASSWORD="$PGPASS"
+gate "oracle-check"
 "$GWBIN" oracle-check --ops "$OUT/oracle-ops.json" \
   --pg-dsn "postgres://lab@127.0.0.1:5433/lab?sslmode=disable" \
   --sku demo-item --out "$OUT/oracle" 2>&1 | tee -a "$OUT/steps.log" || { fail "oracle"; exit 1; }

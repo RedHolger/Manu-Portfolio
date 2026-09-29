@@ -59,6 +59,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `faultlab validate --scenario FILE
 faultlab plan --scenario FILE
 faultlab run --scenario FILE --out DIR [--db FILE] [--gateway URL] [--metrics URL]
+  [--kubeconfig PATH] [--api-admin URL]
 faultlab status --run-id ID [--db FILE]
 faultlab cleanup --run-id ID [--db FILE] [--gateway URL]
 faultlab reconcile [--db FILE] [--gateway URL]
@@ -66,6 +67,15 @@ faultlab report --run-id ID [--db FILE]
 faultlab pod-delete --deployment NAME [--kubeconfig PATH]
 faultlab dep-fault --api-admin URL (--fail [--ttl N] | --clear)
 faultlab oracle-check --ops FILE --pg-dsn DSN --sku SKU --out DIR`)
+}
+
+// podsFromKubeconfig builds the namespace-enforced deleter.
+func podsFromKubeconfig(path string) (*faultlab.PodDeleter, error) {
+	client, err := kubeClient(path)
+	if err != nil {
+		return nil, err
+	}
+	return faultlab.NewPodDeleter(client, "sre-lab")
 }
 
 func loadScenario(args []string) (faultlab.Scenario, string, string) {
@@ -123,11 +133,13 @@ permissions: admin token on lab gateway only; no pod/node/cluster actions (F1/F2
 // ---- F2 live commands ----
 
 type liveFlags struct {
-	db      string
-	out     string
-	gateway string // admin base URL
-	metrics string // public base URL (load + /metrics)
-	runID   string
+	db         string
+	out        string
+	gateway    string // admin base URL
+	metrics    string // public base URL (load + /metrics)
+	runID      string
+	kubeconfig string // enables pod_delete faults (empty = unsupported)
+	apiAdmin   string // enables dependency_failure faults (empty = unsupported)
 }
 
 func parseLive(args []string) liveFlags {
@@ -144,6 +156,10 @@ func parseLive(args []string) liveFlags {
 			f.metrics = args[i+1]
 		case "--run-id":
 			f.runID = args[i+1]
+		case "--kubeconfig":
+			f.kubeconfig = args[i+1]
+		case "--api-admin":
+			f.apiAdmin = args[i+1]
 		}
 	}
 	return f
@@ -185,12 +201,24 @@ func openRunner(f liveFlags) (*faultlab.Runner, *faultlab.Journal, error) {
 		return nil, nil, err
 	}
 	inj := faultlab.NewGatewayInjector(f.gateway, adminToken(), "kind-sre-lab")
-	return &faultlab.Runner{
+	r := &faultlab.Runner{
 		Journal: j, Injector: inj, Clock: clock.RealClock{},
 		Gateway: f.metrics, OutDir: f.out,
 		CheckContext: defaultCheckContext,
 		LoadTimeout:  10 * time.Second, CleanupCap: 60 * time.Second,
-	}, j, nil
+	}
+	if f.kubeconfig != "" {
+		pods, err := podsFromKubeconfig(f.kubeconfig)
+		if err != nil {
+			_ = j.Close()
+			return nil, nil, err
+		}
+		r.Pods = pods
+	}
+	if f.apiAdmin != "" {
+		r.Dep = faultlab.NewHTTPDepFault(f.apiAdmin, adminToken())
+	}
+	return r, j, nil
 }
 
 func run(args []string) error {

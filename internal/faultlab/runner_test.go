@@ -15,6 +15,9 @@ import (
 
 	"sre-portfolio/internal/clock"
 	"sre-portfolio/internal/loadgen"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 // labDouble serves reservations (201) and exposition counters. failEveryNth
@@ -242,5 +245,125 @@ func TestRunnerResultJSON(t *testing.T) {
 	})
 	if err != nil || len(raw) == 0 {
 		t.Fatal("report marshal failed")
+	}
+}
+
+// Runner pod-fault integration (fake cluster): pick by ownership, delete by
+// UID, verify gone, full lifecycle to PASSED.
+func TestRunnerPodFaultPass(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	cs := fake.NewSimpleClientset(labDeployment("x"), labReplicaSet(),
+		ownedPod("a", "1"), ownedPod("b", "2"))
+	pd, err := NewPodDeleter(cs, WantNamespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Pods = pd
+	sc := testScenario()
+	sc.FaultKind = FaultPodDelete
+	sc.Baseline, sc.FaultSecs = 1, 2
+	term, err := r.Run(context.Background(), sc, "run-pod")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if term != StPassed {
+		t.Fatalf("terminal=%s, want PASSED", term)
+	}
+	// Deleted pod gone; sibling untouched.
+	pods, _ := cs.CoreV1().Pods(WantNamespace).List(context.Background(), metav1.ListOptions{})
+	names := map[string]bool{}
+	for _, p := range pods.Items {
+		names[p.Name] = true
+	}
+	if names["a"] || !names["b"] {
+		t.Fatalf("pods=%v, want only b", names)
+	}
+	row, _ := j.GetRun("run-pod")
+	if row.State != StPassed {
+		t.Fatalf("journal=%s", row.State)
+	}
+}
+
+// Runner dep-fault integration (fake controller).
+func TestRunnerDepFaultPass(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, _, _ := testRunner(t, d.srv.URL)
+	dep := NewFakeDepFault()
+	r.Dep = dep
+	sc := testScenario()
+	sc.FaultKind = FaultDepOutage
+	sc.Baseline, sc.FaultSecs = 1, 2
+	term, err := r.Run(context.Background(), sc, "run-dep")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if term != StPassed {
+		t.Fatalf("terminal=%s, want PASSED", term)
+	}
+	if dep.SetCalls != 1 || dep.ClearCalls != 1 {
+		t.Fatalf("set=%d clear=%d, want 1/1", dep.SetCalls, dep.ClearCalls)
+	}
+	if bad, _ := dep.IsFailing(context.Background()); bad {
+		t.Fatal("fault still active after run")
+	}
+}
+
+// Unsupported backend is rejected before any journal row or lock.
+func TestRunnerRejectsUnconfiguredBackend(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	sc.FaultKind = FaultPodDelete // Pods nil
+	if _, err := r.Run(context.Background(), sc, "run-nopod"); err == nil {
+		t.Fatal("expected backend error")
+	}
+	if _, err := j.GetRun("run-nopod"); err == nil {
+		t.Fatal("journal row created despite rejection")
+	}
+	sc.FaultKind = FaultDepOutage // Dep nil
+	if _, err := r.Run(context.Background(), sc, "run-nodep"); err == nil {
+		t.Fatal("expected backend error")
+	}
+}
+
+// Reconcile of a dangling pod fault verifies restoration.
+func TestReconcilePodFault(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	cs := fake.NewSimpleClientset(labDeployment("x"), labReplicaSet(), ownedPod("b", "2"))
+	pd, err := NewPodDeleter(cs, WantNamespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Pods = pd
+	// Crash mid-run with a recorded fault whose pod is ALREADY gone.
+	if err := j.CreateRun("r-pod", "h", "reservations", 1, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{StPreflight, StBaseline, StInjecting} {
+		prev := StCreated
+		if s != StPreflight {
+			r0, _ := j.GetRun("r-pod")
+			prev = r0.State
+		}
+		if err := j.Transition("r-pod", prev, s, "e", "{}", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := j.RecordFault("r-pod", "r-pod-f1", FaultPodDelete,
+		`{"slot":"stable","deployment":"api-stable","pod":"a","uid":"pod-1"}`, "2030-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	done, err := r.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(done) != 1 {
+		t.Fatalf("reconciled=%v", done)
+	}
+	row, _ := j.GetRun("r-pod")
+	if row.State != StFailed {
+		t.Fatalf("state=%s, want FAILED", row.State)
 	}
 }

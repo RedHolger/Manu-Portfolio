@@ -298,3 +298,26 @@
   pod delete + replacement 2/2; dep-fault 300x503 then 200x201 post-TTL;
   oracle CLEAN over 12,139 real rows (11 acked + replay, 0 violations).
 - Full unit suite green. Disk 1.3-2.3GiB throughout; no deletions, no benchmarks.
+
+## Session: floor uniformity + acceptance guards (faultlab-dev)
+- ROOT CAUSE (reviewer finding confirmed): disk-floor.sh defaulted MIN_GB=1
+  while session notes claimed a 2GB floor; acceptance-f3f4.sh ran at
+  1.3GiB under that effective 1GB floor, the watchdog tripped mid-run
+  (STOP file preserved in results/faultlab/acceptance-20260929T143244Z/),
+  and only one upfront STOP check existed — later steps ran post-breach.
+- Fix: default floor is now 2GB everywhere (kind suites already used 2);
+  STOP+floor gate before every mutating acceptance step; selftest asserts
+  the default. No thresholds were lowered to bypass anything.
+
+## Session: runner integration + ambiguity E2E + floor hardening (faultlab-dev)
+- Runner now dispatches gateway/pod/dep faults with journaled intent, lock,
+  abort polling, kind-specific cleanup verification, and reconcile support.
+  Unconfigured backends rejected pre-mutation (no journal row). CLI run takes
+  --kubeconfig/--api-admin; pod-delete/dep-fault/oracle-check commands added.
+- Ambiguous-outcome E2E (labapi X-Test-Drop-Response hook, field-gated):
+  commit lands, reply lost (transport error), same-key retry returns original
+  ID with exactly one decrement. Ordinary replay tests do not cover this.
+- Floor: default now 2GB everywhere; per-step gates in acceptance script;
+  selftest asserts default + override (fixed its own low-disk false failure).
+- `go test ./...` 11/11 green + selftest ALL PASS. Disk ~1.4GiB (test builds
+  consumed ~1GB; no cleaning per no-deletion constraint). No live runs.

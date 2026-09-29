@@ -55,15 +55,7 @@ func main() {
 	}
 	srv := &server{store: store, log: log, mode: *labMode, slow: time.Duration(*slowMs) * time.Millisecond, errRate: *errorPct, dep: &depFault{}}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/reservations", srv.handleReserve)
-	mux.HandleFunc("GET /v1/reservations/{id}", srv.handleGet)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /readyz", srv.handleReady)
-	mux.HandleFunc("GET /metrics", srv.handleMetrics)
+	mux := buildMux(srv)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,
@@ -144,6 +136,24 @@ type server struct {
 	slow    time.Duration
 	errRate float64
 	dep     *depFault
+	// testHooks enables the X-Test-Drop-Response path used by the
+	// committed-but-response-lost test. Never enabled in deployment
+	// (field defaults false; no flag or env sets it).
+	testHooks bool
+}
+
+// buildMux wires all routes (shared by main and server-level tests).
+func buildMux(srv *server) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/reservations", srv.handleReserve)
+	mux.HandleFunc("GET /v1/reservations/{id}", srv.handleGet)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /readyz", srv.handleReady)
+	mux.HandleFunc("GET /metrics", srv.handleMetrics)
+	return mux
 }
 
 // depFault is a bounded simulated dependency outage (F3): pre-transaction
@@ -247,6 +257,19 @@ func (s *server) handleReserve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	// Test-only lost-response path: the reservation above already committed.
+	// With testHooks on, drop the connection without writing a response so
+	// the client observes an ambiguous outcome (commit landed, reply lost).
+	if s.testHooks && r.Header.Get("X-Test-Drop-Response") == "1" {
+		if hj, ok := w.(http.Hijacker); ok {
+			if conn, _, herr := hj.Hijack(); herr == nil {
+				_ = conn.Close()
+				return
+			}
+		}
+		// No hijack available (in-process recorder): fall through and
+		// respond normally. The drop path is covered by server-level tests.
+	}
 	w.WriteHeader(map[bool]int{true: http.StatusOK, false: http.StatusCreated}[replayed])
 	_ = json.NewEncoder(w).Encode(map[string]string{"id": res.ID})
 	log.Info("reserved", "id", res.ID, "replayed", replayed)

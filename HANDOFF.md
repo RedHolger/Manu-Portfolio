@@ -62,3 +62,9 @@ Pod deletion, dep-fault TTL cycle, and oracle verified against kind-sre-lab;
 evidence in results/faultlab/acceptance-20260929T143244Z/. Runner integration
 of pod faults remains future work (acceptance used dedicated CLI connectors).
 RecoverOps still deferred. BudgetGuard review/top-ups still pending.
+
+## Runner integration status (faultlab-dev): implemented + unit-tested
+Pod-delete and dependency faults run through the phased runner (intent,
+lock, abort, cleanup verification, reconcile). Ambiguous-response E2E
+proves same-key retry safety across a real lost reply. Live re-running of
+these paths needs disk ≥2GB (currently ~1.4GiB) — gated, not attempted.
