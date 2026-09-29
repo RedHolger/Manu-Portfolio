@@ -378,6 +378,42 @@ Status reflects executed tests and measured outcomes only.
 - `go test ./...` 11/11 green + selftest ALL PASS. Disk ~1.4GiB (test builds
   consumed ~1GB; no cleaning per no-deletion constraint). No live runs.
 
+## Session: runner pod/dep live acceptance (faultlab-dev)
+- Post-restart recovery: Docker Desktop started (daemon ~20s), kind node
+  Ready, all 8 lab pods Ready after one restart each. No cluster
+  delete/recreate; volumes, journals, evidence preserved.
+- PG crash-recovery clean in logs; pre-run invariants: 12,139 rows (matches
+  pre-restart acceptance), 0 dup keys, conservation drift 0.
+- Parser change (completes runner integration): `pod_delete` now parses
+  (was F3-gated rejection); `TestParsePodDelete` added, stale "runner stays
+  gateway-scoped" comment fixed. `go test ./...` 11/11 green.
+- Dep runner abort path: FAILED(abort) CORRECT — single-pod fault +
+  keep-alive pinning drove gateway-observed stable failures to 85/85 in the
+  fault window (other pod got zero). Journal: intent/applied/cleared,
+  8 events; IsFailing false post-run. Proven by pod logs (50 baseline
+  writes, zero after arm) + gateway counters.
+- Dep runner full path (abort 1.0, documented): PASSED, 8 events,
+  applied+cleared, IsFailing false.
+- Pod runner path: PASSED. Journaled UID target (hct7v d38e6685…),
+  applied+cleared, 8 events; original gone, replacement 69cwn + wtktz 2/2
+  Ready. 175 gateway successes / 0 errors; PG 125 unique rows: 50 baseline
+  (lost logs with the deleted pod) + 75 clean failover writes + 50
+  commit-then-retry recoveries (`replayed:true` on wtktz, loadgen
+  correctness profile retrying ambiguous outcomes with the same key).
+  Zero double-writes; conservation holds.
+- Oracle ambiguous live case: deliberate unacked op + same-key retry →
+  same ID, exactly one decrement (87636→87635); oracle-check CLEAN over
+  12,365 rows (acked=1, ambiguous=1 reconciled, violations=0).
+- Evidence: `results/faultlab/runner-acceptance-20260929T221906Z/` (3 run
+  dirs + journals, scenarios, oracle, disk-end 18GiB). Watchdog armed,
+  never tripped (no STOP). Disk 19.5→18GiB; floor held all steps.
+- Left running: nothing (all port-forwards stopped, watchdog killed).
+  Lab idle, 2/2 stable Ready. No deletions.
+- Still pending (runtime-blocked): baseline-versus-resilient comparison;
+  BudgetGuard 10-per-class top-ups. Independent source re-review is
+  NOT runtime-blocked (separate track). RecoverOps deferred; no benchmarks;
+  no publishing.
+
 ## Session: durable handoff files (faultlab-dev)
 - AGENTS.md rewritten (stable instructions; dropped M0-blocked env facts,
   15GiB rule, B1-B4-only scope). TASKS.md gained BG-01–BG-10 register with

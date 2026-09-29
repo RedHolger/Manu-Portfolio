@@ -1,6 +1,7 @@
 // connect.go — F3/F4 CLI connectors: pod-delete, dep-fault, oracle-check.
 // These invoke the standalone adapters against live systems; the phased
-// runner itself stays gateway-fault scoped (documented boundary).
+// runner additionally dispatches pod_delete (via --kubeconfig) and
+// dependency_failure (via --api-admin) with journaled intent.
 package main
 
 import (

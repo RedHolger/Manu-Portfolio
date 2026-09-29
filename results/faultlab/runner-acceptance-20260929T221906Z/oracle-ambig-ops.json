@@ -1,0 +1,17 @@
+[
+ {
+  "op_id": "op-ambig-send",
+  "key": "ambig-live-0",
+  "sku": "demo-item",
+  "qty": 1,
+  "acked": false
+ },
+ {
+  "op_id": "op-ambig-retry",
+  "key": "ambig-live-0",
+  "sku": "demo-item",
+  "qty": 1,
+  "acked": true,
+  "reservation_id": "4962979a-5cc4-26c7-0799-dc37558400f3"
+ }
+]

@@ -1,0 +1,1 @@
+/dev/disk3s5   228Gi   186Gi    18Gi    92%    3.5M  190M    2%   /System/Volumes/Data

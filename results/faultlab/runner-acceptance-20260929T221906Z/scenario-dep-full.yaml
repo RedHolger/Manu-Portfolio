@@ -1,0 +1,31 @@
+apiVersion: portfolio.sre/v1
+kind: FaultExperiment
+metadata:
+  name: runner-dep-full
+spec:
+  context: kind-sre-lab
+  namespace: sre-lab
+  target:
+    service: reservations
+    slot: stable
+  workload:
+    rate: 5
+    seed: 703
+    timeoutSeconds: 5
+  phases:
+    baselineSeconds: 10
+    faultSeconds: 30
+    recoverySeconds: 10
+  fault:
+    type: dependency_failure
+    delayMilliseconds: 0
+    fraction: 0
+    ttlSeconds: 60
+  abort:
+    maxFailureRatio: 1.0
+    consecutiveWindows: 3
+    windowSeconds: 5
+  assertions:
+    duplicateReservations: 0
+    negativeInventory: false
+    recoveryDeadlineSeconds: 120

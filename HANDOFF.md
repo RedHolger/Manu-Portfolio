@@ -13,20 +13,23 @@
   in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
-- F3/F4 live acceptance (`d55b52b`): pod deletion, dep-fault TTL cycle,
-  oracle CLEAN over 12,139 rows; then runner integration + ambiguity E2E
-  + floor hardening (`f817c53`). Full unit suite green at HEAD.
+- Runner pod/dep live acceptance (2026-09-29): dep FAILED(abort) correct +
+  dep PASSED + pod PASSED via `faultlab run` with journaled intent;
+  deliberate ambiguous oracle case CLEAN (1 reconciled, 0 violations).
+  `pod_delete` parsing enabled (was F3-gated); full suite 11/11 green.
+  Evidence: `results/faultlab/runner-acceptance-20260929T221906Z/`.
 
 ## Current task and next exact action
-- Current: post-restart recovery (2026-09-29). Verified: tree clean at
-  `679afbd`, `go build ./...` OK, `go test ./...` 11/11 packages green.
-- Next: start Docker Desktop (`open -a Docker`), wait for daemon, then
-  `kubectl get pods -n sre-lab` on context `kind-sre-lab` to see whether
-  the 8 lab pods survived the reboot or the kind node needs recreation.
-  No live runs until cluster state is inspected; disk ≥2GB + watchdog
-  still required before any live work.
-- Live work still queued (unchanged): runner pod/dep path re-verification,
-  10-per-class top-ups, baseline-versus-resilient comparison.
+- Current: all authorized runner-path live acceptance complete. Lab idle:
+  no port-forwards, no watchdog, no lab processes; api-stable 2/2 Ready
+  (69cwn replacement + wtktz); disk 18GiB; tree has code + TASKS/HANDOFF
+  updates uncommitted.
+- Next: commit this checkpoint locally. Then STOP live work: remaining
+  FaultLab comparison + BudgetGuard top-ups need a fresh authorized
+  window (disk ≥2GB + watchdog). Independent source re-review is a
+  separate non-runtime track (per owner correction) — not blocked on Docker.
+- Live work still queued (unchanged): baseline-versus-resilient comparison,
+  10-per-class top-ups.
 
 ## Commands executed and exit results
 - `go build ./...` at `679afbd` post-restart: OK (exit 0).
@@ -34,6 +37,9 @@
   (labgateway has no test files; faultlab package 40s).
 - Prior at HEAD: `go test ./...` 11/11 green, `./scripts/selftest.sh` ALL
   PASS, `promtool test rules` SUCCESS 10/10 (rules unchanged since `cad2f7e`).
+- This session: `go test ./...` 11/11 green after the `pod_delete` parser
+  change; 3 live runner runs (dep-abort FAILED-correct, dep-full PASSED,
+  pod PASSED) + ambiguous oracle CLEAN — see TASKS.md for counts.
 - `kubectl apply -k` side effect observed: manifests carry `replicas:`,
   so re-applying scales deployments back up (scale-to-0 does not survive).
 
@@ -46,19 +52,20 @@
 
 ## Running processes, cluster state, disk state
 - Post-restart (2026-09-29): no load/generator/faultlab processes (ps clean).
-- Docker daemon DOWN (Docker.app present, `docker info` fails; kind cannot
-  list clusters). kubectl context reads `kind-sre-lab` but the API server
-  at 127.0.0.1:52831 refuses connection — cluster unreachable until Docker
-  Desktop starts. Prior "8/8 pods Ready" state is NOT assumed to survive.
-- Disk: 17GiB free (Data vol 92%) — well above the 2GB floor, up from the
-  1.3–2.3GiB reported pre-restart (reboot + stopped Docker VM freed space).
-  Cause of the jump not forensically established; re-check before live runs.
+- Docker up (started this session). Context `kind-sre-lab`, node Ready.
+  All 8 lab pods Ready; api-stable now 69cwn (pod-run replacement) + wtktz.
+  Gateway faults empty, dep-fault disarmed, routing stable-only. Idle.
+- Disk: 18GiB free (19.5 at Docker start). Floor 2GB held at every step;
+  watchdog armed for the run, never tripped (no STOP in the new run dir).
+  The old acceptance STOP stays preserved as historical evidence.
   No deletions made.
 
 ## Evidence paths
 - `results/SUMMARY.md` (native vs kind, contaminated runs listed).
 - `results/budgetguard/kind-fullwindow-*/` (9/9 full-window acceptance).
 - `results/faultlab/acceptance-20260929T143244Z/` (F3/F4 live acceptance).
+- `results/faultlab/runner-acceptance-20260929T221906Z/` (NEW: dep-abort +
+  dep-full + pod runner runs with journals, scenarios, ambiguous oracle).
 - `results/budgetguard/screenshots/` (2 verified Grafana captures).
 - `docs/postmortems/disk-pressure-2026-09-27.md`.
 

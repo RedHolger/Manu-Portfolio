@@ -9,8 +9,9 @@ import (
 	"strings"
 )
 
-// Fault kinds. Gateway application-layer simulations only (F1/F2);
-// pod_delete is parsed but rejected until F3 with an explicit error.
+// Fault kinds. Gateway application-layer simulations (F2), the lab-API
+// dependency outage (F3, TTL-bounded), and UID-precondition pod deletion
+// (F3, allowlisted Deployments only).
 const (
 	FaultDelay     = "gateway_delay"
 	FaultConnFail  = "conn_fail"
@@ -164,9 +165,7 @@ func ParseScenario(raw string) (Scenario, error) {
 		return c, fmt.Errorf("slot %q must be stable|candidate (one target per run)", c.Slot)
 	}
 	switch c.FaultKind {
-	case FaultDelay, FaultConnFail, FaultDepOutage:
-	case FaultPodDelete:
-		return c, fmt.Errorf("fault %q deferred to F3 (not implemented)", FaultPodDelete)
+	case FaultDelay, FaultConnFail, FaultDepOutage, FaultPodDelete:
 	default:
 		return c, fmt.Errorf("unknown fault type %q", c.FaultKind)
 	}
