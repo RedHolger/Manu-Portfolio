@@ -1,5 +1,61 @@
 # TASKS.md — milestone ledger (honest status only)
 
+## Review-findings register (BG-01–BG-10; full text in docs/REVIEW.md)
+All fixed on `correctness-fixes` (`cad2f7e`); live reruns done in-kind.
+Status reflects executed tests and measured outcomes only.
+
+- BG-01 Full-window telemetry coverage — DONE. Files: `internal/budgetguard/coverage.go`,
+  `coverage_test.go`, `evaluate.go` (wired). Criteria: ≤10% missing, no gap >20s,
+  window edges verified per slot or INCONCLUSIVE. Tests: 4 coverage tests
+  (full/short/gap/empty) + live full-window suite 9/9 (rate 25 × 330s, zero
+  INCONCLUSIVE). Outcome: enforced live. Blockers: none. Commit: `cad2f7e`.
+- BG-02 Validation on the instant-query path — DONE. Files:
+  `internal/telemetry/client.go` (`checkEnvelope`, `checkSamples`, `QueryMatrix`).
+  Criteria: warnings + NaN/Inf rejected on instant and range paths. Tests: 3
+  instant-path rejections + existing range tests; caught a real `[2]any` bug.
+  Outcome: enforced. Blockers: none. Commit: `cad2f7e`.
+- BG-03 Watchdog termination and whole-suite abort — DONE. Files:
+  `scripts/disk-watchdog.sh`, `scripts/lib.sh`, both kind suites.
+  Criteria: all launcher forms killed, STOP planted, every class block halts.
+  Tests: `scripts/selftest.sh` (fake `exec -a` processes). Outcome: proven;
+  also exposed the env-vs-positional floor bug, fixed. Blockers: none. Commit: `cad2f7e`.
+- BG-04 Explicit Kubernetes context enforcement — DONE. Files:
+  `scripts/require-context.sh`, kind suites, acceptance + demo scripts,
+  `faultlab run` (`defaultCheckContext`). Criteria: any foreign/absent context
+  refused pre-mutation. Tests: stub-kubectl accept/refuse/override. Outcome:
+  enforced. Blockers: none. Commit: `cad2f7e`.
+- BG-05 Fixed-duration scheduling and accounting — DONE. Files:
+  `internal/loadgen/loadgen.go`. Criteria: every fired tick counts toward n;
+  `Offered == Launched + Dropped`; `Truncated` only on early stop. Tests:
+  saturation timing + cancel truncation + clean accounting. Outcome: enforced.
+  Blockers: none. Commit: `cad2f7e`.
+- BG-06 Configured threshold and fractional counts — DONE. Files:
+  `internal/budgetguard/evaluate.go`, `sli.go` (float64 `Counts`),
+  `DecideCounts` + `Estimated`. Criteria: bucket label from config; gating on
+  raw fractions; display-only rounding. Tests: 0.5-threshold capture,
+  20.4999-boundary FAIL, estimated flag. Outcome: enforced. Blockers: none.
+  Commit: `cad2f7e`.
+- BG-07 Reliable Makefile, smoke, acceptance commands — DONE. Files: `Makefile`,
+  `cmd/labload` (`runSmoke`, `Successful`). Criteria: `make test-rules` uses
+  `test rules FILE`; `test-workload` matches real names; smoke needs a 2xx.
+  Tests: smoke fail/pass servers; `make test-rules` SUCCESS; 5 workload PASS.
+  Outcome: verified live. Blockers: none. Commit: `cad2f7e`.
+- BG-08 Complete alert policy — DONE. Files: `internal/budgetguard/compile.go`,
+  `monitoring/rule-tests.yaml` (10/10). Criteria: FastBurn/page + TicketBurn/
+  ticket per SLI incl. 3d/6h. Tests: compiler assertions + 3-day ticket
+  fixture (ticket fires, fast stays silent). Outcome: `promtool` SUCCESS.
+  Blockers: none. Commit: `cad2f7e`.
+- BG-09 Result-file write errors propagated — DONE. Files: `cmd/budgetguard`
+  (`writeResult` returns error; 3 callers). Criteria: unwritable path exits 1.
+  Tests: unwritable-path + round-trip. Outcome: enforced. Blockers: none.
+  Commit: `cad2f7e`.
+- BG-10 Missing-bucket test reaches the bucket — DONE. Files:
+  `internal/budgetguard/evaluate_test.go`. Criteria: fake serves fresh
+  timestamp + full coverage so the empty bucket is what fails. Tests: asserts
+  the `fast`-query error. Outcome: enforced. Blockers: none. Commit: `cad2f7e`.
+
+## Session history (append-only; newest last)
+
 ## Session 2026-09-27 (cont.) — toolchain live, unit gates PASS
 - Deleted approved caches 2,3,5 only (uv 2.3G, pip 1.9G, Homebrew 606M;
   realpaths verified, no symlinks). 509Mi → 5.4Gi free.
@@ -321,3 +377,13 @@
   selftest asserts default + override (fixed its own low-disk false failure).
 - `go test ./...` 11/11 green + selftest ALL PASS. Disk ~1.4GiB (test builds
   consumed ~1GB; no cleaning per no-deletion constraint). No live runs.
+
+## Session: durable handoff files (faultlab-dev)
+- AGENTS.md rewritten (stable instructions; dropped M0-blocked env facts,
+  15GiB rule, B1-B4-only scope). TASKS.md gained BG-01–BG-10 register with
+  status/files/criteria/tests/outcome/commit; history preserved below it.
+- HANDOFF.md rewritten to checkpoint format against verified live state
+  (branch f817c53, 8/8 pods Ready, no lab processes, disk 2.3GiB).
+- docs/REVIEW.md created: full external findings reconstructed from chat
+  (previously nowhere in the repo) + fix verification pointers.
+- No code changes; no retest needed (suite green at HEAD). Docs only.

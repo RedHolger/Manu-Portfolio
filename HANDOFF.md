@@ -1,70 +1,58 @@
-# HANDOFF — sre-portfolio (BudgetGuard → FaultLab)
+# HANDOFF — current checkpoint (BudgetGuard fixes + FaultLab acceptance)
 
-## Baselines (do not rewrite)
-- `0fe8b77` (master): BudgetGuard scoped completion.
-- `cad2f7e` (correctness-fixes): review-findings fixes + full-window acceptance.
-- `26e2fe3` (faultlab-dev): FaultLab F1 + F2 complete, 7/7 demos evidenced.
-- This session continues on `faultlab-dev`: F3 + F4 offline only.
+## Branch and last commit
+- Branch: `faultlab-dev`. HEAD: `f817c53` (runner pod/dep integration,
+  ambiguous-response E2E, uniform 2GB floor).
+- Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
 
-## BudgetGuard status: implemented, self-verified, EXTERNAL REVIEW PENDING
-- Unit/integration: `go test ./...` green incl. `-race`; promtool 10/10.
-- Native 15/15 preliminary + kind full-window 9/9 (healthy/error/slow) +
-  client-error PASS + Grafana screenshots. Contaminated runs preserved.
-- Pending (not completed): independent external re-review; remaining
-  repetitions toward 10-per-class (healthy 10/10 done; error/slow need
-  kind top-ups beyond the full-window 3-seed sets).
+## Uncommitted changes and their purpose
+- `AGENTS.md` (M): rewritten to stable instructions (this handoff task).
+- `TASKS.md` (M): BG-01–BG-10 register added on top of session history.
+- `docs/REVIEW.md` (new): full external findings reconstructed from chat
+  (the review itself lives nowhere else — this file is now canonical).
 
-## FaultLab scope: F1 + F2 done; F3 + F4 offline in progress
-- F1/F2 evidence: `results/faultlab/` (journals, decisions, EVIDENCE.md).
-- F3/F4 run fully offline (1.5–5GiB free; no image builds, no live runs,
-  no deletions). Real Kubernetes/PostgreSQL acceptance: UNEXECUTED.
-- Deferred intact: RecoverOps, repeated benchmarks.
+## Last completed task
+- F3/F4 live acceptance (`d55b52b`): pod deletion, dep-fault TTL cycle,
+  oracle CLEAN over 12,139 rows; then runner integration + ambiguity E2E
+  + floor hardening (`f817c53`). Full unit suite green at HEAD.
 
-## Test success vs experiment outcome (read before citing)
-- A passing unit/integration test proves CODE behavior (parser rejects,
-  journal transitions, fake lifecycles, fixture matrices).
-- An experiment outcome (PASS/FAIL/INCONCLUSIVE, burn rates, recovery
-  times) is evidence ONLY from executed live runs with saved raw artifacts.
-- Telemetry-loss demo "passing" means FaultLab correctly reported
-  `CLEANUP_FAILED` — it does NOT establish that restoration succeeded.
-- Contaminated/excluded runs stay excluded however green the unit suite is.
+## Current task and next exact action
+- Current: durable handoff files (AGENTS/TASKS/HANDOFF/REVIEW) per review.
+- Next: commit this checkpoint on `faultlab-dev`; rebuild the inspection
+  archive only if disk allows (needs ~16MB free; currently 2.3GiB, fine).
+- No live runs головки: next live work (runner pod/dep path re-verification,
+  10-per-class top-ups) requires disk ≥2GB at start + watchdog armed.
 
-## Interfaces to reuse (verify before integrating)
-- Gateway admin: `PUT /admin/faults/{id}` (TTL ≤120s), `DELETE` idempotent,
-  `GET /admin/state`, `PUT /admin/routing` (CAS version) — see
-  `cmd/labgateway/main.go`, `internal/gateway/gateway.go`.
-- Metrics: `lab_requests_total{service,slot,route,result}` + histogram with
-  0.3s bucket — `internal/gateway/exp.go`.
-- Loadgen: `Runner` (open-loop, JSONL) — `internal/loadgen/loadgen.go`.
-- Guards: `scripts/require-context.sh` (kind-sre-lab),
-  `scripts/disk-floor.sh`, `scripts/disk-watchdog.sh`.
-- Clock: `internal/clock/` (real + fake; check what exists first).
+## Commands executed and exit results
+- `go test ./...` at `f817c53`: 11/11 packages ok (last full run).
+- `promtool test rules`: SUCCESS, 10/10 (at `cad2f7e`; rules unchanged since).
+- `./scripts/selftest.sh`: ALL PASS (at `f817c53`).
+- `kubectl apply -k` side effect observed: manifests carry `replicas:`,
+  so re-applying scales deployments back up (scale-to-0 does not survive).
 
-## Environment notes
-- kind cluster `sre-lab` exists, deployments scaled to 0; Docker idle.
-- Disk is the binding constraint (~2.9GiB at branch time); floor 2GB armed.
-- Go 1.27.1, kind 0.33.0, kubectl 1.37.1, promtool 3.15.0, pgx v5.11.0.
-- SQLite driver not yet vendored (need CGO-free pure-Go module).
+## Unexecuted tests
+- Live re-verification of the NEW runner pod/dep paths (unit-tested with
+  fakes only; acceptance used standalone CLI connectors on older code).
+- BudgetGuard 10-per-class top-ups (error/slow kind reps beyond full-window
+  3-seed sets) and independent external re-review.
+- FaultLab baseline-versus-resilient comparison; RecoverOps (deferred).
 
-## FaultLab F2 status (faultlab-dev): implemented + demonstrated
-Runner, injector, observer, CLI complete; 7/7 acceptance demos evidenced in
-results/faultlab/. BudgetGuard external review + 10-per-class: still PENDING.
-Next: F3 (pod deletion + dependency faults) only when resourced.
+## Running processes, cluster state, disk state
+- No load/generator/faultlab processes running (verified via ps).
+- Docker daemon up. Context `kind-sre-lab`. All 8 lab pods Ready
+  (api×4, gateway, postgres, prometheus, grafana) — `apply` re-scaled them;
+  idle, no traffic. To pause: scale lab deploys to 0 (see runbook).
+- Disk: 2.3GiB free. Floor default 2GB; watchdog available. No deletions made.
 
-## FaultLab F3/F4 status: implemented offline, live acceptance UNEXECUTED
-- F3: PodDeleter (allowlist, UID preconditions, replacement safety) +
-  labapi dep-fault admin (manifest updated, not applied). Fake-client tests.
-- F4: oracle + 5 fixtures + outcome-preserving reports. PGLedger ready.
-- Live k8s/PG checks explicitly unexecuted; no repeated benchmarks run.
+## Evidence paths
+- `results/SUMMARY.md` (native vs kind, contaminated runs listed).
+- `results/budgetguard/kind-fullwindow-*/` (9/9 full-window acceptance).
+- `results/faultlab/acceptance-20260929T143244Z/` (F3/F4 live acceptance).
+- `results/budgetguard/screenshots/` (2 verified Grafana captures).
+- `docs/postmortems/disk-pressure-2026-09-27.md`.
 
-## F3/F4 live acceptance: DONE 2026-09-29 (faultlab-dev)
-Pod deletion, dep-fault TTL cycle, and oracle verified against kind-sre-lab;
-evidence in results/faultlab/acceptance-20260929T143244Z/. Runner integration
-of pod faults remains future work (acceptance used dedicated CLI connectors).
-RecoverOps still deferred. BudgetGuard review/top-ups still pending.
-
-## Runner integration status (faultlab-dev): implemented + unit-tested
-Pod-delete and dependency faults run through the phased runner (intent,
-lock, abort, cleanup verification, reconcile). Ambiguous-response E2E
-proves same-key retry safety across a real lost reply. Live re-running of
-these paths needs disk ≥2GB (currently ~1.4GiB) — gated, not attempted.
+## Unresolved decisions
+- None blocking. Open questions for the owner: approve Unity (1.6G) /
+  Puppeteer (512M) cache deletion if more headroom is needed; confirm
+  whether the next live window should prioritize runner-path re-verification
+  or 10-per-class top-ups.
