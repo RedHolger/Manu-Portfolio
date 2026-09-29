@@ -3,7 +3,8 @@
 ## Baselines (do not rewrite)
 - `0fe8b77` (master): BudgetGuard scoped completion.
 - `cad2f7e` (correctness-fixes): review-findings fixes + full-window acceptance.
-- `faultlab-dev` (this branch, from `cad2f7e`): FaultLab F1–F2 work.
+- `26e2fe3` (faultlab-dev): FaultLab F1 + F2 complete, 7/7 demos evidenced.
+- This session continues on `faultlab-dev`: F3 + F4 offline only.
 
 ## BudgetGuard status: implemented, self-verified, EXTERNAL REVIEW PENDING
 - Unit/integration: `go test ./...` green incl. `-race`; promtool 10/10.
@@ -13,13 +14,20 @@
   repetitions toward 10-per-class (healthy 10/10 done; error/slow need
   kind top-ups beyond the full-window 3-seed sets).
 
-## FaultLab scope (this branch): F1 + F2 only
-- F1: strict scenario validation, `plan`, durable SQLite journal, state
-  machine, fake clock, fake injector + tests. No cluster needed.
-- F2: real gateway delay/failure injection, bounded TTL, workload
-  observation, abort, cleanup, restart reconciliation + one bounded live
-  demo per acceptance case (7 cases), subject to disk floor + watchdog.
-- Deferred: F3/F4, pod deletion, full correctness oracle, RecoverOps.
+## FaultLab scope: F1 + F2 done; F3 + F4 offline in progress
+- F1/F2 evidence: `results/faultlab/` (journals, decisions, EVIDENCE.md).
+- F3/F4 run fully offline (1.5–5GiB free; no image builds, no live runs,
+  no deletions). Real Kubernetes/PostgreSQL acceptance: UNEXECUTED.
+- Deferred intact: RecoverOps, repeated benchmarks.
+
+## Test success vs experiment outcome (read before citing)
+- A passing unit/integration test proves CODE behavior (parser rejects,
+  journal transitions, fake lifecycles, fixture matrices).
+- An experiment outcome (PASS/FAIL/INCONCLUSIVE, burn rates, recovery
+  times) is evidence ONLY from executed live runs with saved raw artifacts.
+- Telemetry-loss demo "passing" means FaultLab correctly reported
+  `CLEANUP_FAILED` — it does NOT establish that restoration succeeded.
+- Contaminated/excluded runs stay excluded however green the unit suite is.
 
 ## Interfaces to reuse (verify before integrating)
 - Gateway admin: `PUT /admin/faults/{id}` (TTL ≤120s), `DELETE` idempotent,

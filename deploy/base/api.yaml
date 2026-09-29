@@ -81,7 +81,9 @@ spec:
         - name: labapi
           image: sre-labapi:local
           # LAB_MODE switched healthy|error|slow by the demo orchestrator.
-          args: ["-addr=:8081", "-mode=healthy"]
+          # -admin-addr enables the localhost-only dependency-fault admin (F3);
+          # never expose it via a Service.
+          args: ["-addr=:8081", "-mode=healthy", "-admin-addr=127.0.0.1:8084"]
           ports:
             - containerPort: 8081
           env:

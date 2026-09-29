@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,11 +29,12 @@ import (
 
 func main() {
 	var (
-		addr     = flag.String("addr", ":8081", "listen address")
-		labMode  = flag.String("mode", "healthy", "healthy|error|slow (LAB_MODE)")
-		stock    = flag.Int64("stock", 100000, "seed stock for demo-item")
-		slowMs   = flag.Int("slow-ms", 400, "added delay in slow mode")
-		errorPct = flag.Float64("error-rate", 0.05, "seeded pre-tx error rate in error mode")
+		addr      = flag.String("addr", ":8081", "listen address")
+		adminAddr = flag.String("admin-addr", "", "admin listen (localhost only; empty disables)")
+		labMode   = flag.String("mode", "healthy", "healthy|error|slow (LAB_MODE)")
+		stock     = flag.Int64("stock", 100000, "seed stock for demo-item")
+		slowMs    = flag.Int("slow-ms", 400, "added delay in slow mode")
+		errorPct  = flag.Float64("error-rate", 0.05, "seeded pre-tx error rate in error mode")
 	)
 	flag.Parse()
 
@@ -51,7 +53,7 @@ func main() {
 		store = workload.NewMemStore(*stock)
 		log.Info("store=mem")
 	}
-	srv := &server{store: store, log: log, mode: *labMode, slow: time.Duration(*slowMs) * time.Millisecond, errRate: *errorPct}
+	srv := &server{store: store, log: log, mode: *labMode, slow: time.Duration(*slowMs) * time.Millisecond, errRate: *errorPct, dep: &depFault{}}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/reservations", srv.handleReserve)
@@ -74,6 +76,54 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if *adminAddr != "" {
+		tok := os.Getenv("LAB_ADMIN_TOKEN")
+		if tok == "" {
+			log.Error("LAB_ADMIN_TOKEN required with -admin-addr")
+			os.Exit(1)
+		}
+		adm := http.NewServeMux()
+		adm.HandleFunc("PUT /admin/depfault", func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer "+tok {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
+			var b struct {
+				Fail       bool  `json:"fail"`
+				TTLSeconds int64 `json:"ttlSeconds"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&b); err != nil || (b.Fail && b.TTLSeconds <= 0) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			srv.dep.set(b.Fail, time.Duration(b.TTLSeconds)*time.Second)
+			w.WriteHeader(http.StatusOK)
+		})
+		adm.HandleFunc("GET /admin/depfault", func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer "+tok {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]bool{"failing": srv.dep.down()})
+		})
+		admSrv := &http.Server{Addr: *adminAddr, Handler: adm,
+			ReadHeaderTimeout: 5 * time.Second}
+		go func() {
+			<-ctx.Done()
+			shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = admSrv.Shutdown(shut)
+		}()
+		go func() {
+			if err := admSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Error("admin exit", "err", err)
+				os.Exit(1)
+			}
+		}()
+		log.Info("labapi admin listening", "addr", *adminAddr)
+	}
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -93,6 +143,40 @@ type server struct {
 	mode    string
 	slow    time.Duration
 	errRate float64
+	dep     *depFault
+}
+
+// depFault is a bounded simulated dependency outage (F3): pre-transaction
+// 503s that expire monotonically without runner involvement. Admin-gated,
+// localhost-only, never exposed via a Service.
+type depFault struct {
+	mu      sync.Mutex
+	fail    bool
+	expires time.Time
+}
+
+// set arms (fail=true, ttl>0) or disarms the fault.
+func (d *depFault) set(fail bool, ttl time.Duration) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.fail = fail
+	if fail {
+		d.expires = time.Now().Add(ttl)
+	}
+}
+
+// down reports whether the fault is currently active (lazy expiry).
+func (d *depFault) down() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.fail {
+		return false
+	}
+	if time.Now().After(d.expires) {
+		d.fail = false
+		return false
+	}
+	return true
 }
 
 type reserveBody struct {
@@ -115,6 +199,12 @@ func (s *server) handleReserve(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
 		writeErr(w, http.StatusBadRequest, "Idempotency-Key required")
+		return
+	}
+	// Dependency-outage simulation (F3) fires BEFORE the transaction and
+	// BEFORE seeded modes: unavailable dependency, nothing written.
+	if s.dep != nil && s.dep.down() {
+		writeErr(w, http.StatusServiceUnavailable, workload.ErrDependencyDown.Error())
 		return
 	}
 	// Seeded failure modes occur BEFORE the transaction (§4.1).

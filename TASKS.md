@@ -262,3 +262,19 @@
   reconcile interrupted, abort + telemetry-loss CLEANUP_FAILED, dup cleanup.
 - Full `go test ./...` green. Lab scaled back to 0; disk 1.5GiB steady.
 - Deferred intact: F3/F4, pod deletion, correctness oracle, RecoverOps.
+
+## Session: FaultLab F3/F4 offline start (faultlab-dev, from 26e2fe3)
+- Baselines preserved (0fe8b77, cad2f7e untouched). BudgetGuard external
+  review + 10-per-class top-ups remain PENDING, recorded not completed.
+- Constraints: no image builds, no live runs, no deletions; fake clients +
+  fixtures only. K8s/PG acceptance marked UNEXECUTED until actually run.
+- HANDOFF.md: commits, evidence paths, test-vs-outcome distinction.
+
+## Session: FaultLab F3 offline (faultlab-dev)
+- PodDeleter: allowlist (api-stable|api-candidate), namespace enforcement,
+  owner-UID resolution, UID-precondition delete, lost-response reconcile,
+  replacement-never-touched, VerifyGone with budget. 6 fake-clientset tests.
+- labapi dependency-fault admin (localhost-only, token-gated, TTL lazy
+  expiry, pre-tx 503, nothing written while failing) + unit test + manifest
+  args (not applied). Runner/CLI wiring for pod faults deferred to live F3.
+- K8s/PG live acceptance: UNEXECUTED. Disk 5.8GiB; no pulls/builds/deletions.
