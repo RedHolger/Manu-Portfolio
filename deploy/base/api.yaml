@@ -31,7 +31,9 @@ spec:
       containers:
         - name: labapi
           image: sre-labapi:local # built by scripts/build-images.sh (pins digest)
-          args: ["-addr=:8081", "-mode=healthy"]
+          # -admin-addr enables the localhost-only dependency-fault admin (F3);
+          # never expose it via a Service.
+          args: ["-addr=:8081", "-mode=healthy", "-admin-addr=127.0.0.1:8084"]
           ports:
             - containerPort: 8081
           env:
@@ -40,6 +42,11 @@ spec:
                 secretKeyRef:
                   name: postgres-url
                   key: url
+            - name: LAB_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lab-admin
+                  key: token
           livenessProbe:
             httpGet: {path: /healthz, port: 8081}
             periodSeconds: 5
@@ -92,6 +99,11 @@ spec:
                 secretKeyRef:
                   name: postgres-url
                   key: url
+            - name: LAB_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lab-admin
+                  key: token
           livenessProbe:
             httpGet: {path: /healthz, port: 8081}
             periodSeconds: 5

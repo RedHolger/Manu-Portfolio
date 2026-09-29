@@ -56,3 +56,9 @@ Next: F3 (pod deletion + dependency faults) only when resourced.
   labapi dep-fault admin (manifest updated, not applied). Fake-client tests.
 - F4: oracle + 5 fixtures + outcome-preserving reports. PGLedger ready.
 - Live k8s/PG checks explicitly unexecuted; no repeated benchmarks run.
+
+## F3/F4 live acceptance: DONE 2026-09-29 (faultlab-dev)
+Pod deletion, dep-fault TTL cycle, and oracle verified against kind-sre-lab;
+evidence in results/faultlab/acceptance-20260929T143244Z/. Runner integration
+of pod faults remains future work (acceptance used dedicated CLI connectors).
+RecoverOps still deferred. BudgetGuard review/top-ups still pending.

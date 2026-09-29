@@ -288,3 +288,13 @@
 - Report renderer preserving CONTAMINATED/INCONCLUSIVE/VIOLATED outcomes.
 - `go test ./...` 10/10 packages green. K8s/PG live acceptance UNEXECUTED.
   No image builds, no live runs, no deletions. Disk 5.8GiB.
+
+## Session: F3/F4 live acceptance (faultlab-dev)
+- Wired CLI connectors (pod-delete, dep-fault, oracle-check) after confirming
+  they were standalone-only. Fixed live: manifest token env + stable admin-addr
+  (candidate crashloop), transitive ReplicaSet ownership (pods are NOT owned
+  by Deployments directly — unit fixtures corrected the same way).
+- Acceptance results/faultlab/acceptance-20260929T143244Z: UID-precondition
+  pod delete + replacement 2/2; dep-fault 300x503 then 200x201 post-TTL;
+  oracle CLEAN over 12,139 real rows (11 acked + replay, 0 violations).
+- Full unit suite green. Disk 1.3-2.3GiB throughout; no deletions, no benchmarks.

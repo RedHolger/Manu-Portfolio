@@ -1,6 +1,6 @@
 {
   "generated": "2026-09-27",
-  "status": "PARTIAL — kind cluster live; Grafana provisioning + screenshots pending.",
+  "status": "faultlab-dev F3/F4 connectors live-verified; see HANDOFF.md",
   "go": "go1.27.1 darwin/arm64 (brew, measured)",
   "kind": "v0.33.0 (brew, measured)",
   "kind_node_image": "kindest/node@sha256:a1ed56cfb0e7 (v1.37.0, docker image ID a1ed56cfb0e7, measured in node containerd)",
@@ -13,7 +13,7 @@
     "github.com/jackc/pgx/v5": "v5.11.0 (go.mod, measured)"
   },
   "local_binaries": {
-    "sre-labapi:local": "docker sha256:10a5df08c93643658f71285761f974fbed0fcea6e9ed000cdb45922575acc2c8 = node sha256:99319fbc5e4fa (kind load re-manifests on import)",
+    "sre-labapi:local": "sha256:97ac7573f30a2dfee559b88bf3d5001629a5618b3b3c52ccf50379f0d6dff2a1 (dep-fault endpoint image, measured)",
     "sre-labgateway:local": "docker sha256:f88bebfec09a29c2aab2f1c33ef469564b4c4ee824e120cddd26fe440ba0d625 = node sha256:16b371dbd7953"
   }
 }

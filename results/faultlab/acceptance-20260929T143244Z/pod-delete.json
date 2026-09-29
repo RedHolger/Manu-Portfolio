@@ -1,0 +1,3 @@
+target: api-stable-59f9cf7fc-mx55d uid=b819b38e-15f7-49b9-9de4-7af9d68cf0c0
+{"deployment":"api-stable","pod":"api-stable-59f9cf7fc-mx55d","result":"deleted-verified","uid":"b819b38e-15f7-49b9-9de4-7af9d68cf0c0"}
+replacement ready: 2/2

@@ -58,6 +58,20 @@ func (p *PodDeleter) PickTarget(ctx context.Context, deployment string) (PodTarg
 	if err != nil {
 		return PodTarget{}, fmt.Errorf("bad deployment selector: %w", err)
 	}
+	// Pods are owned by ReplicaSets, which are owned by the Deployment:
+	// resolve the transitive owner set (Deployment UID + its ReplicaSets).
+	ownedUIDs := map[string]bool{string(dep.UID): true}
+	rss, err := p.Client.AppsV1().ReplicaSets(p.Namespace).List(ctx, metav1.ListOptions{LabelSelector: sel.String()})
+	if err != nil {
+		return PodTarget{}, fmt.Errorf("list replicasets: %w", err)
+	}
+	for _, rs := range rss.Items {
+		for _, ref := range rs.OwnerReferences {
+			if ref.UID == dep.UID {
+				ownedUIDs[string(rs.UID)] = true
+			}
+		}
+	}
 	pods, err := p.Client.CoreV1().Pods(p.Namespace).List(ctx, metav1.ListOptions{LabelSelector: sel.String()})
 	if err != nil {
 		return PodTarget{}, fmt.Errorf("list pods: %w", err)
@@ -65,7 +79,7 @@ func (p *PodDeleter) PickTarget(ctx context.Context, deployment string) (PodTarg
 	var owned []v1.Pod
 	for _, pod := range pods.Items {
 		for _, ref := range pod.OwnerReferences {
-			if ref.UID == dep.UID {
+			if ownedUIDs[string(ref.UID)] {
 				owned = append(owned, pod)
 				break
 			}

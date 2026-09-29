@@ -39,6 +39,12 @@ func main() {
 		err = reconcile(os.Args[2:])
 	case "report":
 		err = report(os.Args[2:])
+	case "pod-delete":
+		err = podDelete(os.Args[2:])
+	case "dep-fault":
+		err = depFault(os.Args[2:])
+	case "oracle-check":
+		err = oracleCheck(os.Args[2:])
 	default:
 		usage()
 		os.Exit(1)
@@ -56,7 +62,10 @@ faultlab run --scenario FILE --out DIR [--db FILE] [--gateway URL] [--metrics UR
 faultlab status --run-id ID [--db FILE]
 faultlab cleanup --run-id ID [--db FILE] [--gateway URL]
 faultlab reconcile [--db FILE] [--gateway URL]
-faultlab report --run-id ID [--db FILE]`)
+faultlab report --run-id ID [--db FILE]
+faultlab pod-delete --deployment NAME [--kubeconfig PATH]
+faultlab dep-fault --api-admin URL (--fail [--ttl N] | --clear)
+faultlab oracle-check --ops FILE --pg-dsn DSN --sku SKU --out DIR`)
 }
 
 func loadScenario(args []string) (faultlab.Scenario, string, string) {
