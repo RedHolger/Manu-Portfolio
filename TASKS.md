@@ -278,3 +278,13 @@
   expiry, pre-tx 503, nothing written while failing) + unit test + manifest
   args (not applied). Runner/CLI wiring for pod faults deferred to live F3.
 - K8s/PG live acceptance: UNEXECUTED. Disk 5.8GiB; no pulls/builds/deletions.
+
+## Session: FaultLab F4 offline (faultlab-dev)
+- Oracle (Check): conservation, unique keys, acked-write resolution,
+  ambiguous reconciliation (info, not violation), conflicting-payload
+  detection. PGLedger ready (live acceptance UNEXECUTED).
+- 5 JSON fixtures: healthy CLEAN (1 ambiguous reconciled); dup-key,
+  broken-stock, lost-write, conflict all detected with named violations.
+- Report renderer preserving CONTAMINATED/INCONCLUSIVE/VIOLATED outcomes.
+- `go test ./...` 10/10 packages green. K8s/PG live acceptance UNEXECUTED.
+  No image builds, no live runs, no deletions. Disk 5.8GiB.

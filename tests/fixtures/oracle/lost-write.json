@@ -1,0 +1,8 @@
+{
+  "initial_stock": 100,
+  "available": 100,
+  "reservations": [],
+  "ops": [
+    {"op_id": "op-9", "key": "k9", "sku": "demo-item", "qty": 1, "acked": true, "reservation_id": "ghost"}
+  ]
+}

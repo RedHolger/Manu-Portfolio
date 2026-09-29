@@ -1,0 +1,15 @@
+{
+  "initial_stock": 100,
+  "available": 96,
+  "reservations": [
+    {"id": "r1", "key": "k1", "hash": "h1", "sku": "demo-item", "qty": 1},
+    {"id": "r2", "key": "k2", "hash": "h2", "sku": "demo-item", "qty": 2},
+    {"id": "r3", "key": "k3", "hash": "h3", "sku": "demo-item", "qty": 1}
+  ],
+  "ops": [
+    {"op_id": "op-1", "key": "k1", "sku": "demo-item", "qty": 1, "acked": true, "reservation_id": "r1"},
+    {"op_id": "op-2", "key": "k2", "sku": "demo-item", "qty": 2, "acked": true, "reservation_id": "r2"},
+    {"op_id": "op-3", "key": "k3", "sku": "demo-item", "qty": 1, "acked": false},
+    {"op_id": "op-3r", "key": "k3", "sku": "demo-item", "qty": 1, "acked": true, "reservation_id": "r3"}
+  ]
+}

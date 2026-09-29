@@ -50,3 +50,9 @@
 Runner, injector, observer, CLI complete; 7/7 acceptance demos evidenced in
 results/faultlab/. BudgetGuard external review + 10-per-class: still PENDING.
 Next: F3 (pod deletion + dependency faults) only when resourced.
+
+## FaultLab F3/F4 status: implemented offline, live acceptance UNEXECUTED
+- F3: PodDeleter (allowlist, UID preconditions, replacement safety) +
+  labapi dep-fault admin (manifest updated, not applied). Fake-client tests.
+- F4: oracle + 5 fixtures + outcome-preserving reports. PGLedger ready.
+- Live k8s/PG checks explicitly unexecuted; no repeated benchmarks run.

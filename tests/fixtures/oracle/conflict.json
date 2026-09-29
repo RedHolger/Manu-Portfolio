@@ -1,0 +1,12 @@
+{
+  "initial_stock": 100,
+  "available": 97,
+  "reservations": [
+    {"id": "r1", "key": "k1", "hash": "h1", "sku": "demo-item", "qty": 1},
+    {"id": "r2", "key": "k1", "hash": "hX", "sku": "demo-item", "qty": 2}
+  ],
+  "ops": [
+    {"op_id": "op-1", "key": "k1", "sku": "demo-item", "qty": 1, "acked": true, "reservation_id": "r1"},
+    {"op_id": "op-2", "key": "k1", "sku": "demo-item", "qty": 2, "acked": true, "reservation_id": "r2"}
+  ]
+}
