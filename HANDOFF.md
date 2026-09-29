@@ -1,15 +1,16 @@
 # HANDOFF — current checkpoint (BudgetGuard fixes + FaultLab acceptance)
 
 ## Branch and last commit
-- Branch: `faultlab-dev`. HEAD: `f817c53` (runner pod/dep integration,
-  ambiguous-response E2E, uniform 2GB floor).
+- Branch: `faultlab-dev`. HEAD: `679afbd` (durable handoff: stable AGENTS,
+  BG register, checkpoint HANDOFF, full REVIEW).
 - Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
+- Full chain verified post-restart: `0fe8b77 -> cad2f7e -> df08ed9 ->
+  26e2fe3 -> 4cd142b -> d124ce6 -> d55b52b -> f817c53 -> 679afbd`.
 
 ## Uncommitted changes and their purpose
-- `AGENTS.md` (M): rewritten to stable instructions (this handoff task).
-- `TASKS.md` (M): BG-01–BG-10 register added on top of session history.
-- `docs/REVIEW.md` (new): full external findings reconstructed from chat
-  (the review itself lives nowhere else — this file is now canonical).
+- None. Tree clean (`git status --short --branch` shows only `## faultlab-dev`).
+- The prior handoff's uncommitted AGENTS/TASKS/REVIEW docs are committed
+  in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
 - F3/F4 live acceptance (`d55b52b`): pod deletion, dep-fault TTL cycle,
@@ -17,16 +18,22 @@
   + floor hardening (`f817c53`). Full unit suite green at HEAD.
 
 ## Current task and next exact action
-- Current: durable handoff files (AGENTS/TASKS/HANDOFF/REVIEW) per review.
-- Next: commit this checkpoint on `faultlab-dev`; rebuild the inspection
-  archive only if disk allows (needs ~16MB free; currently 2.3GiB, fine).
-- No live runs головки: next live work (runner pod/dep path re-verification,
-  10-per-class top-ups) requires disk ≥2GB at start + watchdog armed.
+- Current: post-restart recovery (2026-09-29). Verified: tree clean at
+  `679afbd`, `go build ./...` OK, `go test ./...` 11/11 packages green.
+- Next: start Docker Desktop (`open -a Docker`), wait for daemon, then
+  `kubectl get pods -n sre-lab` on context `kind-sre-lab` to see whether
+  the 8 lab pods survived the reboot or the kind node needs recreation.
+  No live runs until cluster state is inspected; disk ≥2GB + watchdog
+  still required before any live work.
+- Live work still queued (unchanged): runner pod/dep path re-verification,
+  10-per-class top-ups, baseline-versus-resilient comparison.
 
 ## Commands executed and exit results
-- `go test ./...` at `f817c53`: 11/11 packages ok (last full run).
-- `promtool test rules`: SUCCESS, 10/10 (at `cad2f7e`; rules unchanged since).
-- `./scripts/selftest.sh`: ALL PASS (at `f817c53`).
+- `go build ./...` at `679afbd` post-restart: OK (exit 0).
+- `go test ./...` at `679afbd` post-restart: 11/11 packages ok
+  (labgateway has no test files; faultlab package 40s).
+- Prior at HEAD: `go test ./...` 11/11 green, `./scripts/selftest.sh` ALL
+  PASS, `promtool test rules` SUCCESS 10/10 (rules unchanged since `cad2f7e`).
 - `kubectl apply -k` side effect observed: manifests carry `replicas:`,
   so re-applying scales deployments back up (scale-to-0 does not survive).
 
@@ -38,11 +45,15 @@
 - FaultLab baseline-versus-resilient comparison; RecoverOps (deferred).
 
 ## Running processes, cluster state, disk state
-- No load/generator/faultlab processes running (verified via ps).
-- Docker daemon up. Context `kind-sre-lab`. All 8 lab pods Ready
-  (api×4, gateway, postgres, prometheus, grafana) — `apply` re-scaled them;
-  idle, no traffic. To pause: scale lab deploys to 0 (see runbook).
-- Disk: 2.3GiB free. Floor default 2GB; watchdog available. No deletions made.
+- Post-restart (2026-09-29): no load/generator/faultlab processes (ps clean).
+- Docker daemon DOWN (Docker.app present, `docker info` fails; kind cannot
+  list clusters). kubectl context reads `kind-sre-lab` but the API server
+  at 127.0.0.1:52831 refuses connection — cluster unreachable until Docker
+  Desktop starts. Prior "8/8 pods Ready" state is NOT assumed to survive.
+- Disk: 17GiB free (Data vol 92%) — well above the 2GB floor, up from the
+  1.3–2.3GiB reported pre-restart (reboot + stopped Docker VM freed space).
+  Cause of the jump not forensically established; re-check before live runs.
+  No deletions made.
 
 ## Evidence paths
 - `results/SUMMARY.md` (native vs kind, contaminated runs listed).
