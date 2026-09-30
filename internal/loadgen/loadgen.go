@@ -11,9 +11,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"net"
 	"net/http"
 	"sort"
 	"sync"
@@ -58,7 +60,10 @@ type Config struct {
 	Duration time.Duration
 	Seed     int64
 	Timeout  time.Duration
-	// CorrectnessProfile: retry 503/timeout once with the same key.
+	// CorrectnessProfile: retry 503/timeout/transport once with the same key.
+	// All three classes are safe to re-offer: the idempotency key plus
+	// request-hash compare makes effects at-most-once, so a retry can only
+	// resolve to the original reservation, never duplicate it.
 	CorrectnessProfile bool
 	Workers            int
 	// InvalidFraction of ops use an unknown SKU (→ 400 client_error).
@@ -186,7 +191,7 @@ type job struct {
 
 func (rn *Runner) once(ctx context.Context, cfg Config, j job) Attempt {
 	key := fmt.Sprintf("load-%d-%d", cfg.Seed, j.n)
-	att := Attempt{OpID: j.opID, PlannedAt: j.planned, StartAt: time.Now(), KeyHash: hashStr(key)}
+	att := Attempt{OpID: j.opID, AttemptID: 1, PlannedAt: j.planned, StartAt: time.Now(), KeyHash: hashStr(key)}
 	sku := "demo-item"
 	if cfg.InvalidFraction > 0 {
 		h := fnv.New32a()
@@ -196,8 +201,10 @@ func (rn *Runner) once(ctx context.Context, cfg Config, j job) Attempt {
 		}
 	}
 	code, slot, resv, eclass := rn.post(ctx, cfg, key, 1, sku, 1)
-	// Correctness profile: ONE retry with the same key on ambiguous outcome.
-	if cfg.CorrectnessProfile && (eclass == "timeout" || (eclass == "http" && code == 503)) {
+	// Correctness profile: ONE retry with the same key on any ambiguous or
+	// safely-retryable outcome (timeout, transport error, HTTP 503).
+	if cfg.CorrectnessProfile && (eclass == "timeout" || eclass == "transport" ||
+		(eclass == "http" && code == 503)) {
 		if rn.OnRetry != nil {
 			rn.OnRetry(j.opID)
 		}
@@ -228,7 +235,15 @@ func (rn *Runner) post(ctx context.Context, cfg Config, key string, attempt int,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		// A cancelled harness context is a timeout; a client-side timeout
+		// (net.Error) is also a timeout even when the caller's context is
+		// still alive — without this, timeouts misclassify as transport
+		// and the correctness profile never retries them.
 		if ctx.Err() != nil {
+			return 0, "", "", "timeout"
+		}
+		var nerr net.Error
+		if errors.As(err, &nerr) && nerr.Timeout() {
 			return 0, "", "", "timeout"
 		}
 		return 0, "", "", "transport"

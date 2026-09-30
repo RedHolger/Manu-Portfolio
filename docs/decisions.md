@@ -24,3 +24,20 @@
   severe (page). A single "short burst" fixture is rejected as ambiguous.
 - D-010: No cleanup deletion without explicit per-path approval. `make doctor`
   missing-item output is diagnostic, not a gate pass.
+- D-011 (2026-09-29): FaultLab baseline-versus-resilient compares ONE client
+  setting — `retryAmbiguousOnce` (labload `--correctness-profile`):
+  baseline retries never, resilient retries 503/timeout once with the same
+  idempotency key. Rationale: server-side knobs that survive a restart do
+  not exist in the lab (gateway 5s transport is hardcoded; labapi modes are
+  faults, not hardening), while retry policy is fully wired, needs no image
+  rebuild, and directly tests the idempotency design (interview notes 4-5).
+  The harness builds both commands from shared variables and fails if
+  anything but the profile flag differs. labapi single-pod dep-fault
+  excluded as a comparison fault: gateway→pod keep-alive pinning makes its
+  effect luck-dependent (total outage iff the pinned pod is faulted, and a
+  retry over the still-pinned connection cannot convert it). Selected
+  faults: gateway_delay (independent per-attempt draw; measures gain vs
+  amplification) and pod_delete (real failover; measures recovery).
+  labload JSONL records one line per logical op (final attempt only), so
+  attempts = lines + retried lines and first-attempt latency is not
+  preserved — reported honestly as logical-op latency + retry rate.

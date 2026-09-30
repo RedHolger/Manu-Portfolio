@@ -1,0 +1,29 @@
+{
+ "run": "run-pod-950-resilient",
+ "fault": "pod",
+ "seed": 950,
+ "profile": "resilient",
+ "labload_exit": 0,
+ "load_valid": true,
+ "t_start": 1790729533,
+ "t_arm": 1790729553,
+ "t_clear": 1790729593,
+ "t_end": 1790729633,
+ "summary": {
+  "Offered": 1000,
+  "Launched": 1000,
+  "Completed": 1000,
+  "Dropped": 0,
+  "Outstanding": 0,
+  "SchedLagP50Ms": 1.048,
+  "SchedLagP99Ms": 2.032,
+  "AchievedRPS": 9.999372093629118,
+  "LatP50Ms": 4.943,
+  "LatP95Ms": 7.825,
+  "LatP99Ms": 11.079,
+  "TransportErrors": 0,
+  "Successful": 1000,
+  "Valid": true,
+  "Truncated": false
+ }
+}

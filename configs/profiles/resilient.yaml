@@ -1,0 +1,10 @@
+# Resilient client profile: exactly one same-key retry on ambiguous
+# outcomes (HTTP 503 or timeout), then the outcome stands. Retried attempts
+# use the same Idempotency-Key with a fresh X-Operation-ID suffix, so the
+# gateway fault draw is independent while the reservation effect stays
+# idempotent. Compare against baseline.yaml — the ONLY intended difference
+# is client.retryAmbiguousOnce (implemented as labload --correctness-profile;
+# enforced by scripts/compare-profiles.sh).
+profile: resilient
+client:
+  retryAmbiguousOnce: true

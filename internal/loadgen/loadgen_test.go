@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -172,4 +173,89 @@ func TestAccountingConsistent(t *testing.T) {
 	if sum.Successful != sum.Completed {
 		t.Fatalf("successful=%d completed=%d", sum.Successful, sum.Completed)
 	}
+}
+
+// Correctness profile retries once, same key, on timeout/transport/503.
+// Client-side timeouts must classify as "timeout" even though the harness
+// context is still alive (regression: they misclassified as transport and
+// the retry never fired live).
+func TestRetryOnceSameKey(t *testing.T) {
+	mkJob := func() job {
+		return job{opID: "op-1-1", n: 1, planned: time.Now(), seed: 1}
+	}
+	t.Run("timeout", func(t *testing.T) {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(300 * time.Millisecond) // longer than client timeout
+			w.WriteHeader(http.StatusCreated)
+		}))
+		defer s.Close()
+		rn := &Runner{BaseURL: s.URL}
+		att := rn.once(context.Background(), Config{Timeout: 50 * time.Millisecond, CorrectnessProfile: true}, mkJob())
+		if att.AttemptID != 2 {
+			t.Fatalf("attempt=%d, want 2 (timeout retried)", att.AttemptID)
+		}
+		if att.ErrClass != "timeout" {
+			t.Fatalf("errclass=%q, want timeout", att.ErrClass)
+		}
+	})
+	t.Run("transport", func(t *testing.T) {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		url := s.URL
+		s.Close() // refused connection
+		rn := &Runner{BaseURL: url}
+		att := rn.once(context.Background(), Config{Timeout: 2 * time.Second, CorrectnessProfile: true}, mkJob())
+		if att.AttemptID != 2 {
+			t.Fatalf("attempt=%d, want 2 (transport retried)", att.AttemptID)
+		}
+		if att.ErrClass != "transport" {
+			t.Fatalf("errclass=%q, want transport", att.ErrClass)
+		}
+	})
+	t.Run("flaky503", func(t *testing.T) {
+		var n atomic.Int64
+		var keys []string
+		var mu sync.Mutex
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			keys = append(keys, r.Header.Get("Idempotency-Key"))
+			mu.Unlock()
+			if n.Add(1) == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"same"}`))
+		}))
+		defer s.Close()
+		rn := &Runner{BaseURL: s.URL}
+		att := rn.once(context.Background(), Config{Timeout: 2 * time.Second, CorrectnessProfile: true}, mkJob())
+		if att.AttemptID != 2 || att.Code != http.StatusCreated || att.ResvID != "same" {
+			t.Fatalf("got attempt=%d code=%d id=%q", att.AttemptID, att.Code, att.ResvID)
+		}
+		if len(keys) != 2 || keys[0] != keys[1] {
+			t.Fatalf("retry must reuse the key, got %v", keys)
+		}
+	})
+	t.Run("no-retry-without-profile", func(t *testing.T) {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer s.Close()
+		rn := &Runner{BaseURL: s.URL}
+		att := rn.once(context.Background(), Config{Timeout: 2 * time.Second}, mkJob())
+		if att.AttemptID != 1 || att.Code != http.StatusServiceUnavailable {
+			t.Fatalf("got attempt=%d code=%d", att.AttemptID, att.Code)
+		}
+	})
+	t.Run("no-retry-on-success-or-400", func(t *testing.T) {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+		}))
+		defer s.Close()
+		rn := &Runner{BaseURL: s.URL}
+		att := rn.once(context.Background(), Config{Timeout: 2 * time.Second, CorrectnessProfile: true}, mkJob())
+		if att.AttemptID != 1 || att.Code != http.StatusBadRequest {
+			t.Fatalf("got attempt=%d code=%d", att.AttemptID, att.Code)
+		}
+	})
 }

@@ -1,0 +1,29 @@
+{
+ "run": "run-delay-910-resilient",
+ "fault": "delay",
+ "seed": 910,
+ "profile": "resilient",
+ "labload_exit": 0,
+ "load_valid": true,
+ "t_start": 1790727824,
+ "t_arm": 1790727844,
+ "t_clear": 1790727884,
+ "t_end": 1790727924,
+ "summary": {
+  "Offered": 1000,
+  "Launched": 1000,
+  "Completed": 1000,
+  "Dropped": 0,
+  "Outstanding": 0,
+  "SchedLagP50Ms": 1.049,
+  "SchedLagP99Ms": 1.232,
+  "AchievedRPS": 9.999452263303192,
+  "LatP50Ms": 5.421,
+  "LatP95Ms": 4000.264,
+  "LatP99Ms": 4000.673,
+  "TransportErrors": 98,
+  "Successful": 902,
+  "Valid": true,
+  "Truncated": false
+ }
+}

@@ -396,11 +396,22 @@ Status reflects executed tests and measured outcomes only.
   applied+cleared, IsFailing false.
 - Pod runner path: PASSED. Journaled UID target (hct7v d38e6685…),
   applied+cleared, 8 events; original gone, replacement 69cwn + wtktz 2/2
-  Ready. 175 gateway successes / 0 errors; PG 125 unique rows: 50 baseline
-  (lost logs with the deleted pod) + 75 clean failover writes + 50
-  commit-then-retry recoveries (`replayed:true` on wtktz, loadgen
-  correctness profile retrying ambiguous outcomes with the same key).
-  Zero double-writes; conservation holds.
+  Ready. 175 gateway successes / 0 errors; PG 125 DISTINCT rows.
+  CORRECTION (mechanism, verified by key audit): the 50 `replayed:true`
+  operations are NOT ambiguity recoveries. The runner reuses one seed
+  across phases, so the fault phase re-offered baseline keys load-702-1..50
+  (50 baseline writes + 75 new fault-phase writes = 125 rows; wtktz logged
+  75 first-writes + 50 replays). The deleted pod took no traffic — failover
+  was clean with zero failed requests, but this run exercised NO ambiguity.
+  Per-attempt histories were not preserved, and no retry was even enabled
+  (runner load uses CorrectnessProfile=false). The deliberately
+  unacknowledged operation below remains the ONLY controlled ambiguity
+  evidence. Zero double-writes; conservation holds.
+- RUNNER WART (filed, affects validity of runner-based fault phases):
+  phases share one keyspace when the seed is constant, so fault-phase
+  "new operations" partially replay baseline keys and trivially succeed.
+  Comparison harness uses single-phase labload runs (disjoint keys per
+  run); runner fix (phase-disjoint keys) pending.
 - Oracle ambiguous live case: deliberate unacked op + same-key retry →
   same ID, exactly one decrement (87636→87635); oracle-check CLEAN over
   12,365 rows (acked=1, ambiguous=1 reconciled, violations=0).
@@ -413,6 +424,52 @@ Status reflects executed tests and measured outcomes only.
   BudgetGuard 10-per-class top-ups. Independent source re-review is
   NOT runtime-blocked (separate track). RecoverOps deferred; no benchmarks;
   no publishing.
+
+## Session: baseline-versus-resilient comparison (faultlab-dev)
+- Profiles (new, D-011): `configs/profiles/baseline.yaml` (never retry) vs
+  `resilient.yaml` (retry 503/timeout/transport once, same key). No
+  spec doc or profiles existed in-repo; single-setting design chosen because
+  no restart-surviving server knob exists and retry directly tests the
+  idempotency design. Single-pod dep-fault excluded (gateway→pod keep-alive
+  pinning makes it luck-dependent — documented in D-011).
+- PILOT (seed 905, delay) EXPOSED A REAL BUG: resilient retried nothing
+  (`attempt2:0` both runs; all fails classed `transport`). Root causes:
+  (1) client timeouts misclassified as transport (ctx is Background, so the
+  `ctx.Err()` check never fires); (2) retry condition excluded transport.
+  Fixed in `internal/loadgen`: net-timeout → `timeout`, retry on
+  timeout/transport/503, `AttemptID` initialized to 1 (was 0). New
+  `TestRetryOnceSameKey` (5 subtests) green. Pilot dir preserved as the
+  before-fix record (`results/faultlab/compare-20260930T001528Z/`).
+- Also corrected last session's pod-run narrative: the 50 `replayed:true`
+  were baseline-key re-offers (runner reuses one seed across phases — filed
+  as a runner validity wart), not ambiguity recoveries. Deliberate unacked
+  op remains the only controlled ambiguity evidence.
+- MATRIX (`results/faultlab/compare-20260930T002156Z/`, 20/20 runs valid,
+  alternating order, per-pair command diff enforced, reseed per run,
+  per-run oracle): rate 10 × 100s, fault t+20..t+60.
+  - gateway_delay 0.5/3000ms (5 pairs): resilient good +96.6 mean
+    (fail 0.195→0.098), amp 1.206 (+0.206 cost), p99 2001→4001ms
+    (FLAGGED REGRESSION: converted ops pay two timeouts). pg_committed
+    higher (+77..+108: retries land formerly-lost writes, all idempotent).
+    20/20 oracles CLEAN. Fault-window concentration verified (183/400
+    failed in-window, 0 before, 2 after).
+  - pod_delete (5 pairs): 10/10 runs 1000/1000, retries 0, amp 1.0 —
+    10 distinct pods deleted+replaced (verified targets), zero failed
+    requests in ANY run. Replica loss is fully masked; no separation, no
+    regression. Recovery metric 0s everywhere (post-clear goodput never
+    dipped — definition noted in report).
+- Attempts vs ops: JSONL holds one line per logical op (final attempt
+  only); attempts = lines + attempt==2 lines; first-attempt latency not
+  preserved (D-011). `scripts/compare-profiles.sh` (pilot|matrix) +
+  `scripts/compare-report.py` committed. (First pilot invocation crashed on
+  a `set -u`/`local` bash bug before any run — stillborn dir
+  `compare-20260930T001503Z/` left on disk uncommitted; no experiment ran.)
+- Cluster left clean: 8/8 Ready, routing stable-only, no live faults, no
+  strays. Disk 19.0→18GiB; watchdog armed throughout, never tripped.
+  Docker died once mid-session (Mac-side); restarted, PG clean-shutdown
+  recovery, no data loss. No deletions.
+- Still pending: BudgetGuard top-ups, independent source re-review
+  (non-runtime track), RecoverOps, publishing. Runner phase-key wart fix.
 
 ## Session: durable handoff files (faultlab-dev)
 - AGENTS.md rewritten (stable instructions; dropped M0-blocked env facts,

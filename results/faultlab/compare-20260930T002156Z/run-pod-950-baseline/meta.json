@@ -1,0 +1,29 @@
+{
+ "run": "run-pod-950-baseline",
+ "fault": "pod",
+ "seed": 950,
+ "profile": "baseline",
+ "labload_exit": 0,
+ "load_valid": true,
+ "t_start": 1790729634,
+ "t_arm": 1790729654,
+ "t_clear": 1790729694,
+ "t_end": 1790729734,
+ "summary": {
+  "Offered": 1000,
+  "Launched": 1000,
+  "Completed": 1000,
+  "Dropped": 0,
+  "Outstanding": 0,
+  "SchedLagP50Ms": 1.04,
+  "SchedLagP99Ms": 1.841,
+  "AchievedRPS": 9.999398240413639,
+  "LatP50Ms": 4.765,
+  "LatP95Ms": 7.348,
+  "LatP99Ms": 9.526,
+  "TransportErrors": 0,
+  "Successful": 1000,
+  "Valid": true,
+  "Truncated": false
+ }
+}

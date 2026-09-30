@@ -60,7 +60,7 @@ func parseRunOptions(args []string) (runOptions, error) {
 	fs.StringVar(&o.out, "output", "results/run.jsonl", "JSONL attempts path")
 	fs.StringVar(&o.sumOut, "summary", "", "summary JSON path")
 	fs.DurationVar(&o.timeout, "timeout", 2*time.Second, "per-request timeout")
-	fs.BoolVar(&o.correct, "correctness-profile", false, "retry ambiguous writes with same key")
+	fs.BoolVar(&o.correct, "correctness-profile", false, "retry 503/timeout/transport once with same key")
 	fs.Float64Var(&o.invalid, "invalid-fraction", 0, "fraction of ops with unknown SKU (400s, SLI-excluded)")
 	if err := fs.Parse(args); err != nil {
 		return o, err

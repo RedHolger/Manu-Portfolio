@@ -13,23 +13,24 @@
   in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
-- Runner pod/dep live acceptance (2026-09-29): dep FAILED(abort) correct +
-  dep PASSED + pod PASSED via `faultlab run` with journaled intent;
-  deliberate ambiguous oracle case CLEAN (1 reconciled, 0 violations).
-  `pod_delete` parsing enabled (was F3-gated); full suite 11/11 green.
-  Evidence: `results/faultlab/runner-acceptance-20260929T221906Z/`.
+- Baseline-versus-resilient comparison (2026-09-30): profiles
+  (`configs/profiles/`, D-011) differ only in same-key retry.
+  Pilot exposed + fixed a real timeout-misclassification bug (retry never
+  fired); matrix 20/20 valid pairs: delay fault resilient +96.6 good ops
+  at +0.206 amplification with a flagged p99 doubling (2001→4001ms);
+  pod_delete 10/10 runs 1000/1000 (fully masked, no separation).
+  All oracles CLEAN. Evidence: `results/faultlab/compare-20260930T002156Z/`
+  (+ pilot `compare-20260930T001528Z/` as before-fix record).
 
 ## Current task and next exact action
-- Current: all authorized runner-path live acceptance complete. Lab idle:
-  no port-forwards, no watchdog, no lab processes; api-stable 2/2 Ready
-  (69cwn replacement + wtktz); disk 18GiB; tree has code + TASKS/HANDOFF
-  updates uncommitted.
-- Next: commit this checkpoint locally. Then STOP live work: remaining
-  FaultLab comparison + BudgetGuard top-ups need a fresh authorized
-  window (disk ≥2GB + watchdog). Independent source re-review is a
-  separate non-runtime track (per owner correction) — not blocked on Docker.
-- Live work still queued (unchanged): baseline-versus-resilient comparison,
-  10-per-class top-ups.
+- Current: comparison milestone complete; tree has code + TASKS/HANDOFF
+  updates uncommitted. Lab idle and clean (8/8 Ready, stable-only, no
+  live faults, no strays); disk 18GiB.
+- Next: commit this checkpoint locally. Live work queued: NONE authorized
+  — FaultLab experimental part is done; remaining FaultLab item is the
+  runner phase-key wart fix (offline-able). BudgetGuard top-ups,
+  independent re-review (non-runtime track), RecoverOps, publishing all
+  pending.
 
 ## Commands executed and exit results
 - `go build ./...` at `679afbd` post-restart: OK (exit 0).
@@ -37,9 +38,14 @@
   (labgateway has no test files; faultlab package 40s).
 - Prior at HEAD: `go test ./...` 11/11 green, `./scripts/selftest.sh` ALL
   PASS, `promtool test rules` SUCCESS 10/10 (rules unchanged since `cad2f7e`).
-- This session: `go test ./...` 11/11 green after the `pod_delete` parser
-  change; 3 live runner runs (dep-abort FAILED-correct, dep-full PASSED,
-  pod PASSED) + ambiguous oracle CLEAN — see TASKS.md for counts.
+- This session: `go test ./...` 11/11 green after loadgen retry fix +
+  AttemptID=1; 22 live comparison runs (2 pilot + 20 matrix, all
+  preserved) — see TASKS.md for counts. Timeout-misclassification fix
+  covered by new `TestRetryOnceSameKey`.
+  Interpretation bound: the 50 `replayed:true` operations are recorded as
+  same-key replays only; without per-attempt histories they do not alone
+  establish lost-response-after-commit (the deliberate unacked op is the
+  controlled ambiguity evidence).
 - `kubectl apply -k` side effect observed: manifests carry `replicas:`,
   so re-applying scales deployments back up (scale-to-0 does not survive).
 
@@ -66,6 +72,9 @@
 - `results/faultlab/acceptance-20260929T143244Z/` (F3/F4 live acceptance).
 - `results/faultlab/runner-acceptance-20260929T221906Z/` (NEW: dep-abort +
   dep-full + pod runner runs with journals, scenarios, ambiguous oracle).
+- `results/faultlab/compare-20260930T001528Z/` (pilot pair: before-fix
+  record, resilient retried nothing) and `compare-20260930T002156Z/`
+  (20-run matrix + generated `report.md`).
 - `results/budgetguard/screenshots/` (2 verified Grafana captures).
 - `docs/postmortems/disk-pressure-2026-09-27.md`.
 

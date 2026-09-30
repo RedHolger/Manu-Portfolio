@@ -1,0 +1,10 @@
+# Baseline client profile: no retries.
+# Every logical operation is a single HTTP attempt. An ambiguous outcome
+# (503, timeout, transport error) stays failed; the client never learns
+# whether the reservation committed. Compare against resilient.yaml —
+# this file and resilient.yaml MUST differ only in
+# client.retryAmbiguousOnce (enforced by scripts/compare-profiles.sh,
+# which builds both labload commands from shared variables).
+profile: baseline
+client:
+  retryAmbiguousOnce: false

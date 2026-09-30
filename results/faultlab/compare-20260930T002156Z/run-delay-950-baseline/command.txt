@@ -1,0 +1,1 @@
+/tmp/cmp-labload-bin run --gateway http://127.0.0.1:8080 --rate 10 --duration 100s --seed 950 --timeout 2s --invalid-fraction 0 --output results/faultlab/compare-20260930T002156Z/run-delay-950-baseline/load.jsonl --summary results/faultlab/compare-20260930T002156Z/run-delay-950-baseline/load.summary.json 

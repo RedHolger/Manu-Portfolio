@@ -1,0 +1,29 @@
+{
+ "run": "run-delay-905-baseline",
+ "fault": "delay",
+ "seed": 905,
+ "profile": "baseline",
+ "labload_exit": 0,
+ "load_valid": true,
+ "t_start": 1790727333,
+ "t_arm": 1790727353,
+ "t_clear": 1790727393,
+ "t_end": 1790727433,
+ "summary": {
+  "Offered": 1000,
+  "Launched": 1000,
+  "Completed": 1000,
+  "Dropped": 0,
+  "Outstanding": 0,
+  "SchedLagP50Ms": 1.044,
+  "SchedLagP99Ms": 1.361,
+  "AchievedRPS": 9.999660603219407,
+  "LatP50Ms": 5.926,
+  "LatP95Ms": 2000.256,
+  "LatP99Ms": 2000.805,
+  "TransportErrors": 206,
+  "Successful": 794,
+  "Valid": true,
+  "Truncated": false
+ }
+}
