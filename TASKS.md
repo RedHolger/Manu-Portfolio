@@ -506,3 +506,19 @@ Status reflects executed tests and measured outcomes only.
 - B-03 top-up: `seeded-suite-fullwindow.sh` gained SEEDS_* overrides (same
   config, seeds 1004-1010/class = 21 runs). Launch pending commit.
 - Still TODO: B-03 matrix, B-04 demo check, R1-R4, portfolio integration.
+
+## Session: B-03 top-up launch + B-04 demo fix (faultlab-dev)
+- B-03 matrix launched: seeds 1004-1010/class via SEEDS_* overrides (same
+  suite config), 21 reps in background (`/tmp/bg-topup.log`). Pre-launch:
+  killed my readiness pg forward (port conflict), committed adoption first.
+- B-04 demo defects fixed OFFLINE in `demo-budgetguard.sh` (no live run
+  yet — top-up owns the cluster): (1) demo generated NO traffic (sleep
+  300 with no load → every case INCONCLUSIVE); now runs labload 25x330s
+  per case with distinct seeds; (2) `|| true` masked evaluation outcomes;
+  now captures exit codes and fails on mismatch (healthy→0, error/slow→2),
+  with `|| code=$?` guard under `set -e`. Live demo run deferred to after
+  top-up (both mutate candidate mode/routing).
+- Known suite side effect (pre-existing, preserved for provenance): the
+  fullwindow suite patches candidate args (drops admin-addr/dep admin on
+  candidate) and bumps routing version; declared-live drift to reconcile
+  after B-03 (re-apply manifests + readiness re-check).

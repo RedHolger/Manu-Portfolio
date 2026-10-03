@@ -38,22 +38,34 @@ route20() {
     -d "{\"version\": $VER, \"candidatePercent\": 20}"
 }
 
-run_case() { # run_case <name> <lab_mode>
-  echo "=== case $1 (mode=$2) ==="
+run_case() { # run_case <name> <lab_mode> <expect_exit> <seed>
+  echo "=== case $1 (mode=$2, expect exit $3) ==="
   kubectl -n sre-lab patch deploy/api-candidate \
-    -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"labapi\",\"args\":[\"-addr=:8081\",\"-mode=$2\"]}]}}}}" 2>/dev/null || true
+    -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"labapi\",\"args\":[\"-addr=:8081\",\"-mode=$2\"]}]}}}}" || return 1
   sleep 20 # warmup
   route20
-  sleep 300 # observation
+  # Generate traffic across the observation window (without load the
+  # candidate slot stays below the 1000-request minimum and every case
+  # degrades to INCONCLUSIVE — the demo would show nothing).
+  "$LABLOAD_BIN" run --gateway "$GW" --rate 25 --duration 330s --seed "$4" \
+    --output "$OUT/$1.jsonl" --summary "$OUT/$1.summary.json" || { echo "LOAD FAILED $1" >> "$OUT/failures.log"; return 1; }
   END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   START=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '5 min ago' +%Y-%m-%dT%H:%M:%SZ)
-  go run ./cmd/budgetguard evaluate --config "$CFG" --prometheus "$PROM" \
-    --start "$START" --end "$END" --out "$OUT/$1.json" || true
+  code=0
+  "$BUDGETGUARD_BIN" evaluate --config "$CFG" --prometheus "$PROM" \
+    --start "$START" --end "$END" --out "$OUT/$1.json" || code=$?
+  echo "$1 exit=$code (expect $3)" | tee -a "$OUT/exits.log"
+  if [ "$code" != "$3" ]; then echo "UNEXPECTED $1 exit=$code" >> "$OUT/failures.log"; return 1; fi
 }
 
 go build ./... # fail fast before touching the lab
-run_case healthy healthy
-run_case error error
-run_case slow slow
+go build -o scripts/labload-bin ./cmd/labload
+go build -o scripts/budgetguard-bin ./cmd/budgetguard
+LABLOAD_BIN=scripts/labload-bin
+BUDGETGUARD_BIN=scripts/budgetguard-bin
+GW="${GW:-http://127.0.0.1:8080}"
+run_case healthy healthy 0 2001
+run_case error error 2 2002
+run_case slow slow 2 2003
 python3 scripts/report.py "$OUT"
 echo "demo complete → $OUT (routing reset by trap)"
