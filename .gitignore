@@ -3,3 +3,7 @@ bin/
 *-bin
 *.log
 __pycache__/
+# AppleDouble xattr sidecars (exFAT external volume cannot store xattrs
+# natively; these regenerate on edit and carry no project content).
+._*
+.DS_Store
