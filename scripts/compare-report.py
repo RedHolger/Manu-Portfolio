@@ -140,6 +140,21 @@ for fault in sorted({f for f, _ in pairs}):
         regs.append(f"higher tail latency (p99 {dp:+.1f}ms)")
     L.append(f"- {fault} mean delta: fail {df:+.4f}, good {dg:+.1f}, p99 {dp:+.1f}ms, amp {da:+.3f}")
     L.append(f"- {fault} regressions under resilient: " + ("; ".join(regs) if regs else "none"))
+L.append("## Methods (F-05 provenance notes)")
+L.append("- Retry faults independently sampled: the gateway fault draw hashes"
+         " `X-Operation-ID + fault ID` (internal/gateway/gateway.go `faultFor`),"
+         " and a retry carries a fresh `-a2` operation-ID suffix with the same"
+         " `Idempotency-Key` (internal/loadgen/loadgen.go `post`). A retried"
+         " operation therefore draws its fault independently while its"
+         " reservation effect stays idempotent.")
+L.append("- History is final-outcome-only: JSONL holds one line per logical op"
+         " (final attempt); attempts = lines + `attempt==2` lines."
+         " First-attempt latency is unavailable, not inferred.")
+L.append("- Recovery: seconds from fault-clear to the first 10s window with"
+         " goodput >= 90% of pre-fault goodput; `>30` if never inside the"
+         " post-fault window. Validity: labload exit 0, drops <= 1%, oracle"
+         " CLEAN; invalid runs are listed and excluded from means, preserved"
+         " on disk.")
 L.append("")
 open(os.path.join(OUT, "report.md"), "w").write("\n".join(L) + "\n")
 print(f"wrote {OUT}/report.md ({len(pairs)} pairs)")

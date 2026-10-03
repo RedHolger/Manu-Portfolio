@@ -35,22 +35,22 @@ func TestParseResetFixture(t *testing.T) {
 // Pod deletion parses now that the runner dispatches it (F3 integration);
 // bounds still apply (TTL must cover the fault window).
 func TestParsePodDelete(t *testing.T) {
-  base, err := os.ReadFile("../../configs/faults/delay.yaml")
-  if err != nil {
-    t.Fatal(err)
-  }
-  g := strings.Replace(string(base), "type: gateway_delay", "type: pod_delete", 1)
-  c, err := ParseScenario(g)
-  if err != nil {
-    t.Fatalf("pod_delete: %v", err)
-  }
-  if c.FaultKind != FaultPodDelete {
-    t.Fatalf("kind=%q, want pod_delete", c.FaultKind)
-  }
-  short := strings.Replace(g, "ttlSeconds: 75", "ttlSeconds: 10", 1)
-  if _, err := ParseScenario(short); err == nil {
-    t.Fatal("pod_delete with short TTL: expected error, got nil")
-  }
+	base, err := os.ReadFile("../../configs/faults/delay.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := strings.Replace(string(base), "type: gateway_delay", "type: pod_delete", 1)
+	c, err := ParseScenario(g)
+	if err != nil {
+		t.Fatalf("pod_delete: %v", err)
+	}
+	if c.FaultKind != FaultPodDelete {
+		t.Fatalf("kind=%q, want pod_delete", c.FaultKind)
+	}
+	short := strings.Replace(g, "ttlSeconds: 75", "ttlSeconds: 10", 1)
+	if _, err := ParseScenario(short); err == nil {
+		t.Fatal("pod_delete with short TTL: expected error, got nil")
+	}
 }
 
 func TestRejects(t *testing.T) {

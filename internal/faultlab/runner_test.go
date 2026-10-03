@@ -367,3 +367,56 @@ func TestReconcilePodFault(t *testing.T) {
 		t.Fatalf("state=%s, want FAILED", row.State)
 	}
 }
+
+// Phase-disjoint keys (contract §5/§7): baseline and fault phases must not
+// share idempotency keys, or fault-phase writes become accidental replays.
+func TestPhaseSeedOffset(t *testing.T) {
+	if got := phaseSeedOffset("baseline"); got != 0 {
+		t.Fatalf("baseline offset=%d, want 0 (scenario seed unchanged)", got)
+	}
+	if got := phaseSeedOffset("fault"); got != 1000000 {
+		t.Fatalf("fault offset=%d, want 1000000", got)
+	}
+}
+
+func TestPhaseKeyNamespacesDisjoint(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer s.Close()
+	hashes := map[string]string{}
+	for _, phase := range []string{"baseline", "fault"} {
+		var buf strings.Builder
+		rn := &loadgen.Runner{BaseURL: s.URL, Out: &writerFunc{fn: func(p []byte) (int, error) {
+			return buf.Write(p)
+		}}}
+		if _, err := rn.Run(context.Background(), loadgen.Config{
+			Rate: 20, Duration: 2 * time.Second, Seed: 7 + phaseSeedOffset(phase),
+			Timeout: 2 * time.Second,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+			var a struct {
+				KeyHash string `json:"key_hash"`
+			}
+			if err := json.Unmarshal([]byte(line), &a); err != nil {
+				t.Fatal(err)
+			}
+			if prev, dup := hashes[a.KeyHash]; dup {
+				t.Fatalf("key hash %s shared by %s and %s", a.KeyHash, prev, phase)
+			}
+			hashes[a.KeyHash] = phase
+		}
+	}
+	if len(hashes) != 80 {
+		t.Fatalf("hashes=%d, want 80 (40 per phase, disjoint)", len(hashes))
+	}
+}
+
+type writerFunc struct {
+	fn func([]byte) (int, error)
+}
+
+func (w *writerFunc) Write(p []byte) (int, error) { return w.fn(p) }

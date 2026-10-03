@@ -480,3 +480,29 @@ Status reflects executed tests and measured outcomes only.
 - docs/REVIEW.md created: full external findings reconstructed from chat
   (previously nowhere in the repo) + fix verification pointers.
 - No code changes; no retest needed (suite green at HEAD). Docs only.
+
+## Session: v1 guide adoption + readiness + BG/FL gates (faultlab-dev)
+- Adopted `~/Downloads/SRE_Portfolio_Versioned_Implementation_Guide.md` as
+  v1 authority: committed verbatim as RELEASE_PLAN.md; AGENTS.md scope now
+  three-product sequence with RecoverOps AUTHORIZED; new RELEASE_STATUS.md
+  (gate table), BACKLOG.md (v1.1/v2), CHANGELOG.md.
+- B-01 ACCEPTED (re-verified: build+tests green, `make test-rules` SUCCESS).
+- B-02 ACCEPTED: dead-Prometheus evaluation → INCONCLUSIVE exit 3 with saved
+  query evidence (`results/budgetguard/telemetry-loss-20261003T024957Z/`).
+- F-03 ACCEPTED: journal provenance audit (intent rows incl. pod UID,
+  applied/cleared timestamps, 8 events/run, terminals match result.json).
+- F-04/F-05 ACCEPTED: contract counts match (10 pairs/20 runs); report
+  regenerated with Methods section (retry sampling, final-only history,
+  recovery/validity definitions) — additive diff only.
+- Phase-key wart FIXED (contract §7): runner phases use disjoint seeds
+  (`phaseSeedOffset`: baseline +0, fault +1000000) + `TestPhaseSeedOffset` /
+  `TestPhaseKeyNamespacesDisjoint`. Full suite green. gofmt fixed a
+  pre-existing indent wart in scenario_test.go (my earlier hunk).
+- Shared readiness re-verified live: 8/8 Ready, context kind-sre-lab, PG
+  1000 rows intact across Docker outage (0 dup, drift 0), metrics reachable,
+  create/replay same-ID + API-direct read 200. Gateway has no GET route
+  (pre-existing write-path-only design; reads are API-direct) — noted, not
+  a blocker. Readiness writes added 1 row (ready-001); next suite reseeds.
+- B-03 top-up: `seeded-suite-fullwindow.sh` gained SEEDS_* overrides (same
+  config, seeds 1004-1010/class = 21 runs). Launch pending commit.
+- Still TODO: B-03 matrix, B-04 demo check, R1-R4, portfolio integration.

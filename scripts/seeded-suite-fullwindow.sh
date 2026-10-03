@@ -1,8 +1,10 @@
 #!/bin/bash
-# resume-kind.sh — outstanding kind reps after halt: error x2 (777,888),
-# slow x5 (111-555), client-error verification (1). Same isolation as the
-# main suite (PG reseed, gateway+prometheus restart, routing re-applied).
-# Watchdog + floor armed; STOP aborts with outcomes preserved.
+# seeded-suite-fullwindow.sh — full-window kind reps (rate 25 x 330s,
+# coverage gate enforced). Seed lists overridable for top-ups:
+# SEEDS_ERROR="1004 1005 ..." SEEDS_SLOW=... SEEDS_HEALTHY=... ./scripts/seeded-suite-fullwindow.sh
+# Isolation per rep: PG reseed, gateway+prometheus restart, routing
+# re-applied, candidate mode patched per class. Watchdog + floor armed;
+# STOP aborts with outcomes preserved.
 set -u
 export PATH="/opt/homebrew/bin:/opt/homebrew/opt/postgresql@16/bin:$PATH"
 PROM=http://127.0.0.1:9090
@@ -73,14 +75,14 @@ go build -o scripts/budgetguard-bin ./cmd/budgetguard 2>/dev/null
 echo $! > "$OUT/watchdog.pid"
 
 set_mode error
-for seed in 1001 1002 1003; do run_rep error "$seed" || break; done
+for seed in ${SEEDS_ERROR:-1001 1002 1003}; do run_rep error "$seed" || break; done
 halted "$OUT" || {
 set_mode slow
-for seed in 1001 1002 1003; do run_rep slow "$seed" || break; done
+for seed in ${SEEDS_SLOW:-1001 1002 1003}; do run_rep slow "$seed" || break; done
 }
 halted "$OUT" || {
 set_mode healthy
-for seed in 1001 1002 1003; do run_rep healthy "$seed" || break; done
+for seed in ${SEEDS_HEALTHY:-1001 1002 1003}; do run_rep healthy "$seed" || break; done
 }
 halted "$OUT" && echo "SUITE HALTED by STOP — outcomes preserved" >> "$OUT/failures.log"
 set_mode healthy

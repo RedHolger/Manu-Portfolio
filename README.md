@@ -1,7 +1,8 @@
-# sre-portfolio — shared SRE lab + BudgetGuard (B1–B4)
+# sre-portfolio — shared SRE lab + BudgetGuard + FaultLab (RecoverOps authorized)
 
-Status: **implemented, verified native + in-kind** (see `results/SUMMARY.md`
-for the exact per-environment counts). FaultLab / RecoverOps deferred.
+Status: **BudgetGuard v1.0 and FaultLab v1.0 in acceptance; RecoverOps v1.0
+authorized** (release authority: `RELEASE_PLAN.md`, gates: `RELEASE_STATUS.md`).
+See `results/SUMMARY.md` for exact per-environment counts.
 
 ## What this is
 - `cmd/labapi` — reservation API (PostgreSQL-backed idempotent writes;

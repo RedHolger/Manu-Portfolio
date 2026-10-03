@@ -247,12 +247,23 @@ func (r *Runner) clearFault(ctx context.Context, runID string, f FaultRow) error
 	}
 }
 
+// phaseSeedOffset keeps per-phase operation/key namespaces disjoint: the
+// fault phase must not re-offer baseline keys as accidental replays
+// (contract §5/§7). Baseline keeps the scenario seed for compatibility;
+// later phases offset by a fixed stride larger than any bounded run.
+func phaseSeedOffset(phase string) int64 {
+	if phase == "fault" {
+		return 1000000
+	}
+	return 0
+}
+
 // load runs one workload phase.
 func (r *Runner) load(ctx context.Context, sc Scenario, phase string, secs int64) (loadgen.Summary, error) {
 	rn := &loadgen.Runner{BaseURL: r.Gateway, Out: nil}
 	return rn.Run(ctx, loadgen.Config{
 		Rate: sc.Rate, Duration: time.Duration(secs) * time.Second,
-		Seed: sc.Seed, Timeout: time.Duration(sc.Timeout) * time.Second,
+		Seed: sc.Seed + phaseSeedOffset(phase), Timeout: time.Duration(sc.Timeout) * time.Second,
 	})
 }
 

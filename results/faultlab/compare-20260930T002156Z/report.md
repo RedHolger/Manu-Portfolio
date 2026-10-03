@@ -62,4 +62,8 @@ attempts = logical ops + retries (JSONL holds one line per logical op, final att
 - pod resilient (n=5): mean good=1000.0 fail=0.0000 p99=11.6ms amp=1.000
 - pod mean delta: fail +0.0000, good +0.0, p99 -8.6ms, amp +0.000
 - pod regressions under resilient: none
+## Methods (F-05 provenance notes)
+- Retry faults independently sampled: the gateway fault draw hashes `X-Operation-ID + fault ID` (internal/gateway/gateway.go `faultFor`), and a retry carries a fresh `-a2` operation-ID suffix with the same `Idempotency-Key` (internal/loadgen/loadgen.go `post`). A retried operation therefore draws its fault independently while its reservation effect stays idempotent.
+- History is final-outcome-only: JSONL holds one line per logical op (final attempt); attempts = lines + `attempt==2` lines. First-attempt latency is unavailable, not inferred.
+- Recovery: seconds from fault-clear to the first 10s window with goodput >= 90% of pre-fault goodput; `>30` if never inside the post-fault window. Validity: labload exit 0, drops <= 1%, oracle CLEAN; invalid runs are listed and excluded from means, preserved on disk.
 

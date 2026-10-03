@@ -13,24 +13,19 @@
   in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
-- Baseline-versus-resilient comparison (2026-09-30): profiles
-  (`configs/profiles/`, D-011) differ only in same-key retry.
-  Pilot exposed + fixed a real timeout-misclassification bug (retry never
-  fired); matrix 20/20 valid pairs: delay fault resilient +96.6 good ops
-  at +0.206 amplification with a flagged p99 doubling (2001→4001ms);
-  pod_delete 10/10 runs 1000/1000 (fully masked, no separation).
-  All oracles CLEAN. Evidence: `results/faultlab/compare-20260930T002156Z/`
-  (+ pilot `compare-20260930T001528Z/` as before-fix record).
+- v1 guide adoption (2026-10-03): RELEASE_PLAN.md (verbatim contract),
+  AGENTS.md three-product scope (RecoverOps authorized), RELEASE_STATUS.md,
+  BACKLOG.md, CHANGELOG.md. Gates closed: B-01 (re-verified), B-02
+  (telemetry-loss INCONCLUSIVE exit 3), F-03 (journal audit), F-04/F-05
+  (methods note). Phase-key wart fixed + tested. Readiness re-verified
+  live (PG intact across outage, create/replay/read OK).
 
 ## Current task and next exact action
-- Current: comparison milestone complete; tree has code + TASKS/HANDOFF
-  updates uncommitted. Lab idle and clean (8/8 Ready, stable-only, no
-  live faults, no strays); disk 18GiB.
-- Next: commit this checkpoint locally. Live work queued: NONE authorized
-  — FaultLab experimental part is done; remaining FaultLab item is the
-  runner phase-key wart fix (offline-able). BudgetGuard top-ups,
-  independent re-review (non-runtime track), RecoverOps, publishing all
-  pending.
+- Current: adoption committed next (this checkpoint); then launch B-03
+  top-up matrix (21 reps, seeds 1004-1010/class) in background with log.
+- Next command after commit:
+  `SEEDS_ERROR="1004 1005 1006 1007 1008 1009 1010" SEEDS_SLOW="1004 1005 1006 1007 1008 1009 1010" SEEDS_HEALTHY="1004 1005 1006 1007 1008 1009 1010" nohup ./scripts/seeded-suite-fullwindow.sh > /tmp/bg-topup.log 2>&1 &`
+  Lab running idle; disk 12.5GiB; my readiness pf killed before launch.
 
 ## Commands executed and exit results
 - `go build ./...` at `679afbd` post-restart: OK (exit 0).
