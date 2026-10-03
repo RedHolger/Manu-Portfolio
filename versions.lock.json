@@ -1,14 +1,15 @@
 {
   "generated": "2026-09-27",
-  "status": "faultlab-dev F3/F4 connectors live-verified; see HANDOFF.md",
+  "status": "recoverops-dev R3 live-accepted + R4 genuine-path proven; 10-pair matrix running; see HANDOFF.md",
   "go": "go1.27.1 darwin/arm64 (brew, measured)",
   "kind": "v0.33.0 (brew, measured)",
   "kind_node_image": "kindest/node@sha256:a1ed56cfb0e7 (v1.37.0, docker image ID a1ed56cfb0e7, measured in node containerd)",
   "kubectl": "v1.37.1 (brew, measured; server v1.37.0)",
   "postgresql": "docker.io/library/postgres:16@sha256:c319f2a8182bc (in node containerd, measured)",
   "prometheus": "docker.io/prom/prometheus:v3.15.0@sha256:21cfe572fdc08 (in node containerd, measured; == :v3 digest)",
-  "alertmanager": null,
+  "alertmanager": "docker.io/prom/alertmanager:v0.28.1@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba (measured 2026-10-03)",
   "grafana": "docker.io/grafana/grafana:11.6@sha256:c779f41eff4aa (in node containerd, measured)",
+  "recoverops_controller": "sre-recoverops:local sha256:e555177e2c048964b20310f6172384a3b8fd7c752e50df5521a02cc335d9314c (measured 2026-10-03; scratch + linux/arm64 static binary via /tmp context — exFAT ._ sidecars break buildkit sender)",
   "modules": {
     "github.com/jackc/pgx/v5": "v5.11.0 (go.mod, measured)"
   },

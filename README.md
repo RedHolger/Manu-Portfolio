@@ -1,7 +1,8 @@
 # sre-portfolio — shared SRE lab + BudgetGuard + FaultLab (RecoverOps authorized)
 
-Status: **BudgetGuard v1.0 and FaultLab v1.0 in acceptance; RecoverOps v1.0
-authorized** (release authority: `RELEASE_PLAN.md`, gates: `RELEASE_STATUS.md`).
+Status: **BudgetGuard v1.0 ACCEPTED, FaultLab v1.0 ACCEPTED, RecoverOps R1/R2/R3
+ACCEPTED, R4 in live acceptance** (release authority: `RELEASE_PLAN.md`,
+gates: `RELEASE_STATUS.md`).
 See `results/SUMMARY.md` for exact per-environment counts.
 
 ## What this is
