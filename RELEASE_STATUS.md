@@ -1,6 +1,6 @@
 # RELEASE_STATUS.md — one current gate table (v1 authority: RELEASE_PLAN.md)
 
-Branch: `faultlab-dev`. Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
+Branch: `recoverops-dev`. Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
 External review: PENDING throughout; never blocks local delivery.
 
 | Gate | Product | Status | Commit / evidence | Blocker / next action |
