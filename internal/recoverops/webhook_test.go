@@ -91,17 +91,19 @@ func TestResolvePairAndTerminalStickiness(t *testing.T) {
 	if code, _ := post(t, srv, "sekret", "["+fp+"]"); code != 202 {
 		t.Fatalf("fire code=%d", code)
 	}
+	// Resolved with no execution and no verification must NOT mark
+	// recovery: the case suppresses (terminal, distinct from RESOLVED).
 	code, out := post(t, srv, "sekret", "["+resolved("fp2", "2026-10-03T04:00:00Z", "2026-10-03T04:05:00Z")+"]")
 	if code != 202 {
 		t.Fatalf("resolve code=%d", code)
 	}
 	res := out["results"].([]interface{})[0].(map[string]interface{})
-	if res["result"] != "resolved" {
+	if res["result"] != "suppressed-unverified" {
 		t.Fatalf("result=%v", res)
 	}
 	in, _ := st.GetIncident(res["incident_id"].(string))
-	if in.State != StResolved {
-		t.Fatalf("state=%s", in.State)
+	if in.State != StSuppressed {
+		t.Fatalf("state=%s, want SUPPRESSED", in.State)
 	}
 	// Late firing for a terminal occurrence must not reopen it.
 	code, out = post(t, srv, "sekret", "["+fp+"]")
@@ -112,8 +114,49 @@ func TestResolvePairAndTerminalStickiness(t *testing.T) {
 		t.Fatalf("late fire: %v", res)
 	}
 	in, _ = st.GetIncident(in.ID)
-	if in.State != StResolved {
+	if in.State != StSuppressed {
 		t.Fatalf("reopened: %s", in.State)
+	}
+}
+
+// VERIFYING + persisted verification record + genuine resolved alert →
+// RESOLVED; without the record the case stays open (journaled).
+func TestResolvedRequiresVerification(t *testing.T) {
+	srv, st := testServer(t)
+	fp := firing("fpv", "2026-10-03T04:00:00Z")
+	if code, _ := post(t, srv, "sekret", "["+fp+"]"); code != 202 {
+		t.Fatalf("fire code=%d", code)
+	}
+	list, _ := st.ListIncidents(100, 0)
+	id := list[0].ID
+	for _, to := range []string{StObserved, StExecuting, StVerifying} {
+		if _, err := st.Transition(id, to, "{}"); err != nil {
+			t.Fatalf("transition to %s: %v", to, err)
+		}
+	}
+	res := "[" + resolved("fpv", "2026-10-03T04:00:00Z", "2026-10-03T04:05:00Z") + "]"
+	code, out := post(t, srv, "sekret", res)
+	if code != 202 {
+		t.Fatalf("resolve code=%d", code)
+	}
+	if r := out["results"].([]interface{})[0].(map[string]interface{}); r["result"] != "resolved-unverified" {
+		t.Fatalf("unverified resolve: %v", r)
+	}
+	if in, _ := st.GetIncident(id); in.State != StVerifying {
+		t.Fatalf("state=%s, want VERIFYING (still open)", in.State)
+	}
+	if err := st.AppendEvent(id, "verified", `{"windows":3}`); err != nil {
+		t.Fatal(err)
+	}
+	code, out = post(t, srv, "sekret", res)
+	if code != 202 {
+		t.Fatalf("resolve code=%d", code)
+	}
+	if r := out["results"].([]interface{})[0].(map[string]interface{}); r["result"] != "resolved" {
+		t.Fatalf("verified resolve: %v", r)
+	}
+	if in, _ := st.GetIncident(id); in.State != StResolved {
+		t.Fatalf("state=%s, want RESOLVED", in.State)
 	}
 }
 
@@ -256,7 +299,7 @@ func TestNoKubernetesDependency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allow := map[string]bool{"k8s.go": true, "execute.go": true}
+	allow := map[string]bool{"k8s.go": true, "execute.go": true, "verifyapi.go": true}
 	for _, f := range entries {
 		if strings.HasSuffix(f, "_test.go") || allow[f] {
 			continue
@@ -291,7 +334,7 @@ func TestReplayIngestPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) != 2 || out[0].Result != "created" || out[1].Result != "resolved" {
+	if len(out) != 2 || out[0].Result != "created" || out[1].Result != "suppressed-unverified" {
 		t.Fatalf("replay: %+v", out)
 	}
 }
@@ -326,12 +369,12 @@ func TestAlertmanagerEnvelopeFiringThenResolved(t *testing.T) {
 		t.Fatalf("envelope resolve code=%d out=%v", code, out)
 	}
 	res = out["results"].([]interface{})[0].(map[string]interface{})
-	if res["result"] != "resolved" {
-		t.Fatalf("envelope resolve: %v", res)
+	if res["result"] != "suppressed-unverified" {
+		t.Fatalf("envelope resolve without execution: %v", res)
 	}
 	in, _ := st.GetIncident(id)
-	if in.State != StResolved {
-		t.Fatalf("state=%s, want RESOLVED", in.State)
+	if in.State != StSuppressed {
+		t.Fatalf("state=%s, want SUPPRESSED", in.State)
 	}
 }
 

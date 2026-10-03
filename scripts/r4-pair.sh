@@ -125,6 +125,12 @@ run_arm() { # $1=armname $2=seed $3=dir
   ACT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   note_exec "$(date +%s)"
   measure_windows "$D/$ARM" "$((S+1))" "$((S+2))" "$((S+3))" || { echo "{\"arm\":\"$ARM\",\"incident\":\"$IID\",\"outcome\":\"verify-failed\"}"; return 1; }
+  # Persisted verification record (RESOLVED requires this, not the
+  # resolved webhook alone): POST the measured windows to the endpoint.
+  pf || { echo "{\"arm\":\"$ARM\",\"incident\":\"$IID\",\"outcome\":\"verify-record-unreachable\"}"; return 1; }
+  VR=$(timeout 30 curl -s -m 25 -X POST "http://127.0.0.1:18089/v1/incidents/$IID/verify" -H "Authorization: Bearer $(cat /tmp/ro-token.txt)" -H 'Content-Type: application/json' --data "@$D/$ARM-verify-input.json" 2>/dev/null)
+  echo "$VR" > "$D/$ARM-verify-record.json"
+  echo "$VR" | grep -q '"recovered": *true' || { echo "{\"arm\":\"$ARM\",\"incident\":\"$IID\",\"outcome\":\"verify-record-rejected\"}"; return 1; }
   wait_resolved "$IID" || { echo "{\"arm\":\"$ARM\",\"incident\":\"$IID\",\"alert_at\":\"$AT\",\"acted_at\":\"$ACT\",\"outcome\":\"unresolved\"}"; return 1; }
   RES=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   echo "{\"arm\":\"$ARM\",\"incident\":\"$IID\",\"alert_at\":\"$AT\",\"acted_at\":\"$ACT\",\"resolved_at\":\"$RES\",\"outcome\":\"resolved\"}"

@@ -79,19 +79,25 @@
 ## Current task and next exact action
 - Current: R3 ACCEPTED live; R4 IMPLEMENTED_UNVERIFIED. Genuine AM path
   proven (`0bc3b543` RESOLVED, restart-persistent); pilot pair measured
-  (controller 17s, baseline 120s hold, both RESOLVED); cooldown/budget
-  refusals verified. Matrix (10 pairs, budget-paced 3 exec/h) PENDING.
-  Portfolio IMPLEMENTED_UNVERIFIED (smoke only).
-- Q3 note: `verify` CLI is a pure function (no persistence), so the
-  smoke showed VERIFYING despite `recovered`. RESOLVED persists only via
-  the genuine resolved webhook (VERIFYING→RESOLVED) or cancel API —
-  confirmed live + restart-persistent for `0bc3b543`.
+  (controller 17s, baseline 120s hold, both RESOLVED); pair-01 measured
+  (controller 91s, baseline ~209s incl. hold, both RESOLVED, windows
+  3x150 each). Cooldown/budget refusals verified. Matrix pairs 02-11
+  PENDING (budget-paced 3 exec/h). Portfolio IMPLEMENTED_UNVERIFIED.
+- RESOLVED-rule fix IN PROGRESS (uncommitted): resolved-alert alone must
+  not mark recovery. New: POST /v1/incidents/{id}/verify persists the
+  record (live template == known-good + VerifyRecovery pass);
+  unverified clears → SUPPRESSED. RV1 rows grandfathered only with
+  executed patch + passing windows + genuine resolved (see LEDGER.md).
+- Matrix CHECKPOINTED after pair-01 (driver stopped in budget-wait, no
+  arm active; api-stable healthy). Resume after fix+redeploy:
+  `nohup bash -c 'i=2; seed=320; for order in baseline-first controller-first baseline-first controller-first baseline-first controller-first baseline-first controller-first baseline-first controller-first; do dir=results/recoverops/pairs/pair-$(printf %02d $i); mkdir -p "$dir"; ./scripts/r4-pair.sh "$dir" $seed $order >> results/recoverops/pairs/matrix.log 2>&1; i=$((i+1)); seed=$((seed+20)); done' > /tmp/matrix2.log 2>&1 &`
+  exec.log paces budget (do not delete). Pair ledger:
+  results/recoverops/pairs/LEDGER.md. Count pairs, keep failures.
 - Storage: HOLD continues (migrations untouched; untracked
   `compare-20260930T001503Z/` preserved, not evidence).
-- Next: (1) 10-pair matrix via budget-aware `scripts/r4-pair.sh`
-  (alternating order, all outcomes preserved); (2) full R4 demo timeline
-  + portfolio integration demo; then tag v1.0s. Do not repeat accepted
-  B/F benchmarks without concrete reason.
+- Next: full R4 demo timeline + portfolio integration demo after matrix;
+  then tag v1.0s. Do not repeat accepted B/F benchmarks without concrete
+  reason.
 
 ## Commands executed and exit results
 - HISTORICAL (pre-move, at `679afbd` post-restart): `go build ./...` OK;

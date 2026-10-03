@@ -151,6 +151,7 @@ func serve(args []string) error {
 		} else if lp, perr := recoverops.NewLivePatcher(client, cfg.Namespace); perr != nil {
 			log.Info("reconciler disabled", "err", perr)
 		} else {
+			srv.SetPatcher(lp)
 			recStop := make(chan struct{})
 			defer close(recStop)
 			go recoverops.ReconcileLoop(recStop, st, lp, cfg.Policy, log, 10*time.Second)

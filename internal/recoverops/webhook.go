@@ -53,7 +53,17 @@ type Disposition struct {
 
 // Terminal reports whether no further alert transitions apply.
 func Terminal(state string) bool {
-	return state == StResolved || state == StCancelled
+	return state == StResolved || state == StCancelled ||
+		state == StEscalated || state == StSuppressed
+}
+
+func hasKind(evs []Event, kind string) bool {
+	for _, e := range evs {
+		if e.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // parseOccurrence validates one raw occurrence against the policy pins.
@@ -112,11 +122,14 @@ func deliveryID(raw json.RawMessage) string {
 	return fmt.Sprintf("%x", sum)
 }
 
-// Server serves the R1 HTTP surface.
+// Server serves the R1 HTTP surface plus R3/R4 execution and verification.
+// Patcher is nil in unit tests and observe-only deployments; the verify
+// endpoint then answers 503 rather than recording unverified recovery.
 type Server struct {
-	cfg   Config
-	store *Store
-	mux   *http.ServeMux
+	cfg     Config
+	store   *Store
+	mux     *http.ServeMux
+	patcher *LivePatcher
 	// mu serializes occurrence processing: two concurrent identical
 	// firings must not race past the duplicate check (R1 throughput is
 	// webhook-scale; revisit only with measured contention).
@@ -130,6 +143,7 @@ func NewServer(cfg Config, store *Store) *Server {
 	s.mux.HandleFunc("GET /v1/incidents", s.handleList)
 	s.mux.HandleFunc("GET /v1/incidents/{id}", s.handleShow)
 	s.mux.HandleFunc("POST /v1/incidents/{id}/cancel", s.handleCancel)
+	s.mux.HandleFunc("POST /v1/incidents/{id}/verify", s.handleVerify)
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -138,6 +152,10 @@ func NewServer(cfg Config, store *Store) *Server {
 	s.mux.HandleFunc("GET /metrics", s.handleMetrics)
 	return s
 }
+
+// SetPatcher attaches the live template reader for the verify endpoint
+// (serve wires the same client the reconciler uses).
+func (s *Server) SetPatcher(p *LivePatcher) { s.patcher = p }
 
 // Handler exposes the mux (tests serve it with httptest).
 func (s *Server) Handler() http.Handler { return s.mux }
@@ -307,11 +325,42 @@ func (s *Server) process(o Occurrence, raw json.RawMessage) (Disposition, error)
 		if _, err := s.store.RecordDelivery(delID, occID, known.ID, false, o.StartsAt, o.EndsAt); err != nil {
 			return d, err
 		}
-		if _, err := s.store.Transition(known.ID, StResolved, `{"by":"resolved-alert"}`); err != nil {
-			return d, err
+		// A resolved notification alone never marks recovery successful.
+		// RESOLVED requires a persisted verification record (see the
+		// verify endpoint): VERIFYING + verified event → RESOLVED;
+		// VERIFYING without one stays open (journaled); alert cleared
+		// with no verified recovery on RECEIVED/OBSERVED/ELIGIBLE →
+		// SUPPRESSED (terminal, distinct from verified recovery);
+		// EXECUTING/RECONCILING stay open (work may be in flight).
+		switch known.State {
+		case StVerifying:
+			evs, err := s.store.Events(known.ID)
+			if err != nil {
+				return d, err
+			}
+			if !hasKind(evs, "verified") {
+				_ = s.store.AppendEvent(known.ID, "resolved-unverified",
+					`{"by":"resolved-alert","action":"none"}`)
+				d.Result = "resolved-unverified"
+				return d, nil
+			}
+			if _, err := s.store.Transition(known.ID, StResolved, `{"by":"resolved-alert+verified"}`); err != nil {
+				return d, err
+			}
+			d.Result = "resolved"
+			return d, nil
+		case StReceived, StObserved, StEligible:
+			if _, err := s.store.Transition(known.ID, StSuppressed, `{"by":"resolved-alert","reason":"cleared without verified recovery"}`); err != nil {
+				return d, err
+			}
+			d.Result = "suppressed-unverified"
+			return d, nil
+		default:
+			_ = s.store.AppendEvent(known.ID, "resolved-pending",
+				fmt.Sprintf(`{"by":"resolved-alert","state":%q}`, known.State))
+			d.Result = "resolved-pending"
+			return d, nil
 		}
-		d.Result = "resolved"
-		return d, nil
 	}
 	dup, err := s.store.RecordDelivery(delID, occID, known.ID, true, o.StartsAt, o.EndsAt)
 	if err != nil {

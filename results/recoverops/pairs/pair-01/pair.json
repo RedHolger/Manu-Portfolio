@@ -1,0 +1,3 @@
+{"controller":RESOLVED
+{"arm":"controller","incident":"ebe18a73ded0c1330dbbf160d94f8a02","alert_at":"2026-10-03T17:02:19.685265883Z","acted_at":"2026-10-03T17:03:50Z","resolved_at":"2026-10-03T17:06:08Z","outcome":"resolved"},"baseline":RESOLVED
+{"arm":"baseline","incident":"e7d6f92aa041c50d95fb346005fcb45f","alert_at":"2026-10-03T17:14:34.685265883Z","acted_at":"2026-10-03T17:18:03Z","resolved_at":"2026-10-03T17:20:23Z","outcome":"resolved"}}
