@@ -13,17 +13,17 @@
   in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
-- RecoverOps R1 ACCEPTED on new `recoverops-dev` branch (2026-10-03):
-  webhook ingestion + durable SQLite state, 17 internal + CLI tests green,
-  no cluster mutation (dependency-tested). BudgetGuard + FaultLab v1.0
-  already accepted.
+- RecoverOps R2 ACCEPTED on `recoverops-dev` (2026-10-03): policy
+  evaluation + observe/enforce proposals, cooldown-restart/budget/mismatch
+  tests green, zero cluster writes. R1 also on this branch.
 
 ## Current task and next exact action
-- Current: R1 committed next (this checkpoint) on `recoverops-dev`.
+- Current: R2 committed next (this checkpoint) on `recoverops-dev`.
   Lab idle and clean; disk ~9GiB.
-- Next: RecoverOps R2 (policy evaluation + observe mode, zero writes in
-  observe; cooldown/limits in durable state) per contract §8, still on
-  `recoverops-dev`. No cluster mutation in R2 either.
+- Next: RecoverOps R3 (conditional rollback with UID/resourceVersion
+  preconditions, restart reconciliation, least-privilege RBAC) per
+  contract §8 — first milestone that mutates the cluster (enforce-lab
+  only, single target). Narrow the no-k8s test to the ingest path.
 
 ## Commands executed and exit results
 - `go build ./...` at `679afbd` post-restart: OK (exit 0).

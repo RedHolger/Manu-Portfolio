@@ -248,7 +248,8 @@ func TestReadyAndMetrics(t *testing.T) {
 }
 
 // R1 performs no cluster mutation: the recoverops binaries must not depend
-// on any Kubernetes client package.
+// on any Kubernetes client package. (R3 introduces client-go for the
+// rollback executor; this test must then narrow to the ingest path.)
 func TestNoKubernetesDependency(t *testing.T) {
 	for _, pkg := range []string{"sre-portfolio/internal/recoverops", "sre-portfolio/cmd/recoverops"} {
 		out, err := exec.Command("go", "list", "-deps", pkg).Output()

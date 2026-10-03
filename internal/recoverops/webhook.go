@@ -247,14 +247,18 @@ func (s *Server) process(o Occurrence, raw json.RawMessage) (Disposition, error)
 			return d, nil
 		}
 		ev, _ := json.Marshal(map[string]interface{}{"labels": o.Labels, "startsAt": o.StartsAt})
-		in, _, err := s.store.CreateIncident(occID, "", s.cfg.Policy.Hash, string(ev))
+		in, _, err := s.store.CreateIncident(occID, TargetUID(s.cfg.Policy), s.cfg.Policy.Hash, string(ev))
 		if err != nil {
 			return d, err
 		}
 		if _, err := s.store.RecordDelivery(delID, occID, in.ID, true, o.StartsAt, o.EndsAt); err != nil {
 			return d, err
 		}
-		d.Incident, d.Result = in.ID, "created"
+		d.Incident = in.ID
+		if err := s.propose(in.ID, o); err != nil {
+			return d, err
+		}
+		d.Result = "created"
 		return d, nil
 	}
 	d.Incident = known.ID
@@ -285,8 +289,41 @@ func (s *Server) process(o Occurrence, raw json.RawMessage) (Disposition, error)
 		d.Result = "duplicate"
 		return d, nil
 	}
+	// Re-notification of a still-open incident: re-evaluate idempotently
+	// (proposal action key is incident-scoped; no second logical action).
+	if err := s.propose(known.ID, o); err != nil {
+		return d, err
+	}
 	d.Result = "ok"
 	return d, nil
+}
+
+// propose evaluates one firing occurrence and records the outcome. Eligible
+// incidents move RECEIVED → OBSERVED with a mode-stamped proposal action
+// (OBSERVED in observe mode, PROPOSED in enforce-lab for the R3 executor).
+// Ineligible outcomes journal only the refusal; the incident stays open.
+// Nothing here touches the cluster.
+func (s *Server) propose(incidentID string, o Occurrence) error {
+	out := Evaluate(s.store, s.cfg.Policy, o.Labels, o.StartsAt, time.Now())
+	status := ActObserved
+	if s.cfg.Mode == "enforce-lab" {
+		status = ActProposed
+	}
+	if err := s.store.RecordProposal(incidentID, out, status); err != nil {
+		return err
+	}
+	if !out.Eligible {
+		return nil
+	}
+	cur, err := s.store.GetIncident(incidentID)
+	if err != nil {
+		return err
+	}
+	if cur.State == StReceived {
+		_, err = s.store.Transition(incidentID, StObserved,
+			fmt.Sprintf(`{"mode-status":%q}`, status))
+	}
+	return err
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {

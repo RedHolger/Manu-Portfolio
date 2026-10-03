@@ -16,7 +16,7 @@ External review: PENDING throughout; never blocks local delivery.
 | F-04 | FaultLab | ACCEPTED | 10 pairs / 20 runs, alternating order, command-diff enforced, per-run reseed, 20/20 oracles CLEAN; matches contract counts exactly | — |
 | F-05 | FaultLab | ACCEPTED | Generated `report.md` + Methods section (retry sampling, final-only history, recovery/validity definitions) | — |
 | R1 | RecoverOps | ACCEPTED | 17 internal + CLI tests green on `recoverops-dev` (reopen, dup/reorder, 503, auth/schema/body rejection, no-k8s-deps); no live gate required (no cluster mutation) | — |
-| R2 | RecoverOps | TODO | — | After R1 |
+| R2 | RecoverOps | ACCEPTED | Evaluation + observe/enforce proposals with refusal/cooldown-restart/budget/mismatch tests green; zero cluster writes by construction | — |
 | R3 | RecoverOps | TODO | — | After R2 |
 | R4 | RecoverOps | TODO | — | After R3 |
 | Portfolio | Integration | TODO | — | After three v1.0s |

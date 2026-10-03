@@ -561,3 +561,18 @@ Status reflects executed tests and measured outcomes only.
   + CLI surface tests. Full `go test ./...` green (verify at commit).
 - No new modules (modernc sqlite already pinned). Alertmanager ABSENT from
   cluster — R4 prerequisite, not installed now (minimal scope).
+
+## Session: RecoverOps R2 policy + observe (recoverops-dev)
+- R2 per contract §8 (no cluster mutation): `internal/recoverops/evaluate.go`
+  (freshness ≤15m, snapshot presence/mismatch, cooldown + hourly budget from
+  durable rows; per-incident limit structural via incident-scoped action
+  key), OBSERVED/PROPOSED proposals wired into the firing path
+  (observe→OBSERVED action, enforce-lab→PROPOSED for the R3 executor),
+  RECEIVED→OBSERVED edge (+OBSERVED→RESOLVED/CANCELLED), incident show now
+  includes actions. Live already-known-good comparison deferred to R3
+  (needs cluster read) — documented in code.
+- R2 gate evidence: TestEvaluateEligible/Refusals (stale/future/label/
+  target/no-snapshot/mismatch), TestCooldownAndBudget (incl. hourly
+  budget), TestCooldownSurvivesRestart (executed row → close → reopen →
+  still refused), TestObserveProposalRecorded (both modes, idempotent
+  re-proposal, one logical action). Full suite green.

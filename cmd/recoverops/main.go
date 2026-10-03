@@ -177,6 +177,14 @@ func incident(args []string) error {
 		}
 		out["events"] = evs
 	}
+	acts, err := st.ActionsFor(*id)
+	if err != nil {
+		return err
+	}
+	if acts == nil {
+		acts = []recoverops.ActionRow{}
+	}
+	out["actions"] = acts
 	raw, _ := json.MarshalIndent(out, "", "  ")
 	fmt.Println(string(raw))
 	return nil

@@ -28,10 +28,15 @@ const (
 	StCancelled = "CANCELLED"
 )
 
-// legalR1 lists allowed transitions. Terminal states accept no outgoing
-// edges: a late firing for a terminal occurrence must not reopen it.
-var legalR1 = map[string]map[string]bool{
-	StReceived: {StResolved: true, StCancelled: true},
+// legalTransitions is the single enforcement point for the state machine.
+// R1: RECEIVED → RESOLVED/CANCELLED. R2 adds OBSERVED (proposal recorded)
+// with resolution still allowed from it. Terminal states accept no
+// outgoing edges: a late firing for a terminal occurrence must not reopen it.
+var legalTransitions = map[string]map[string]bool{
+	StReceived:  {StResolved: true, StCancelled: true, StObserved: true},
+	StObserved:  {StResolved: true, StCancelled: true},
+	StResolved:  {},
+	StCancelled: {},
 }
 
 // Incident is one remediation case.
@@ -199,7 +204,7 @@ func (s *Store) Transition(id, to, payload string) (Incident, error) {
 		&in.State, &in.Evidence, &in.CreatedAt, &in.UpdatedAt); err != nil {
 		return in, err
 	}
-	if !legalR1[in.State][to] {
+	if !legalTransitions[in.State][to] {
 		return in, fmt.Errorf("illegal transition %s -> %s", in.State, to)
 	}
 	now := utcNow()
