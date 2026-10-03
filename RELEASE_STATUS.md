@@ -5,7 +5,7 @@ External review: PENDING throughout; never blocks local delivery.
 
 | Gate | Product | Status | Commit / evidence | Blocker / next action |
 |---|---|---|---|---|
-| Readiness | Shared lab | TODO | Last green 2026-09-30 (8/8 Ready, PG invariants, routing) | Re-run bounded readiness now |
+| Readiness | Shared lab | TODO | Last green 2026-09-30 (8/8 Ready, PG invariants, routing) | BLOCKED 2026-10-03: Docker daemon down, kind API refused; re-run bounded readiness when Docker up |
 | B-01 | BudgetGuard | ACCEPTED | `go build`+`go test ./...` green 2026-10-03; `make test-rules` SUCCESS (10/10 fixtures, rules unchanged since `cad2f7e`) | — |
 | B-02 | BudgetGuard | ACCEPTED | Full-window 3-class in `kind-fullwindow-20260928T011047Z/` + telemetry-loss INCONCLUSIVE exit 3 with saved query evidence (`results/budgetguard/telemetry-loss-20261003T024957Z/decision.json`) | — |
 | B-03 | BudgetGuard | ACCEPTED | 10/10/10 full-window (1001-1003 + 1004-1010), zero INCONCLUSIVE/STOP/failures; `results/budgetguard/kind-fullwindow-20261003T025057Z/` + matrix.md; SUMMARY.md ledger rewritten to full-window-only counts | — |
@@ -17,7 +17,7 @@ External review: PENDING throughout; never blocks local delivery.
 | F-05 | FaultLab | ACCEPTED | Generated `report.md` + Methods section (retry sampling, final-only history, recovery/validity definitions) | — |
 | R1 | RecoverOps | ACCEPTED | 17 internal + CLI tests green on `recoverops-dev` (reopen, dup/reorder, 503, auth/schema/body rejection, no-k8s-deps); no live gate required (no cluster mutation) | — |
 | R2 | RecoverOps | ACCEPTED | Evaluation + observe/enforce proposals with refusal/cooldown-restart/budget/mismatch tests green; zero cluster writes by construction | — |
-| R3 | RecoverOps | TODO | — | After R2 |
+| R3 | RecoverOps | IMPLEMENTED_UNVERIFIED | Offline executor + 8 fake tests green 2026-10-03 (`executor.go`, claim/retry/verify/escalate; `deploy/recoverops` least-privilege); `go test ./...` 13 pkgs green | Live kind patch + restart/conflict/timeout reconciliation PENDING (Docker down) |
 | R4 | RecoverOps | TODO | — | After R3 |
 | Portfolio | Integration | TODO | — | After three v1.0s |
 

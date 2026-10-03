@@ -1,0 +1,19 @@
+# Least-privilege Role for RecoverOps R3 (lab only).
+# No nodes, no exec, no secrets-read, no wildcard mutation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: recoverops-rollback
+  namespace: sre-lab
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["api-stable"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["api-stable"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]

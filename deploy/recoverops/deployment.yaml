@@ -1,0 +1,42 @@
+# Single-replica controller; exclusive local DB/process lock (no HA claim).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recoverops
+  namespace: sre-lab
+  labels:
+    app.kubernetes.io/part-of: sre-portfolio
+    app.kubernetes.io/component: recoverops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recoverops
+  template:
+    metadata:
+      labels:
+        app: recoverops
+    spec:
+      serviceAccountName: recoverops
+      containers:
+        - name: controller
+          image: sre-recoverops:local
+          args: ["serve", "--db", "/data/recoverops.db", "--mode", "observe"]
+          ports:
+            - containerPort: 8089
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8089
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: recoverops-data

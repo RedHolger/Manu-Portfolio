@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: recoverops-rollback
+  namespace: sre-lab
+subjects:
+  - kind: ServiceAccount
+    name: recoverops
+    namespace: sre-lab
+roleRef:
+  kind: Role
+  name: recoverops-rollback
+  apiGroup: rbac.authorization.k8s.io

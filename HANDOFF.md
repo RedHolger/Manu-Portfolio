@@ -54,6 +54,7 @@
 - Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
 - NOTE: `RELEASE_STATUS.md:3` still says `Branch: faultlab-dev` — stale,
   needs same fix (not changed in this reconciliation).
+  (FIXED 2026-10-03 in `dea3eb7`: now `recoverops-dev`.)
 
 ## Uncommitted changes and their purpose
 - `?? results/faultlab/compare-20260930T001503Z/` (stillborn `set -u`
@@ -67,17 +68,21 @@
 - RecoverOps R2 ACCEPTED on `recoverops-dev` (2026-10-03): policy
   evaluation + observe/enforce proposals, cooldown-restart/budget/mismatch
   tests green, zero cluster writes. R1 also on this branch.
+- Checkpoint `dea3eb7` (2026-10-03): HANDOFF+STATUS reconciled to
+  `recoverops-dev@d40825c`; storage migrations stay on HOLD.
 
 ## Current task and next exact action
-- Current: R2 is COMMITTED (`cc4287a`), not “committed next” — prior
-  wording was contradictory. Latest operational commit is `d40825c`
-  (migration HALTED). Lab idle; no benchmarks running.
-- Next: RecoverOps R3 (conditional rollback with UID/resourceVersion
-  preconditions, restart reconciliation, least-privilege RBAC) per
-  contract §8 — first milestone that mutates the cluster (enforce-lab
-  only, single target). Prerequisite per `RELEASE_STATUS.md:8`: bounded
-  readiness re-check (last green 2026-09-30 8/8 Ready) before any live
-  run. Narrow the no-k8s test to the ingest path.
+- Current: R3 offline IMPLEMENTED_UNVERIFIED (2026-10-03): executor
+  claim/decisions + 8 fake tests green, `deploy/recoverops`
+  least-privilege manifests; `go test ./...` 13 pkgs green, `go vet`
+  clean. Live kind patch + reconciliation PENDING (Docker daemon down,
+  kind API refused — no cluster recreation per stop rules).
+- Storage: HOLD continues. MANU_DISK 93Gi avail now vs 13G at halt;
+  recovery reason unexplained — does not authorize resuming moves.
+- Next: (1) bounded readiness when Docker up (`make doctor`, pods,
+  PG invariants); (2) R3 live acceptance on kind; (3) R4 verify+demo;
+  (4) portfolio integration. Do not repeat accepted B/F benchmarks
+  without concrete reason. Narrow the no-k8s test to the ingest path.
 
 ## Commands executed and exit results
 - HISTORICAL (pre-move, at `679afbd` post-restart): `go build ./...` OK;

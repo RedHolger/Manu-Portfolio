@@ -576,3 +576,27 @@ Status reflects executed tests and measured outcomes only.
   budget), TestCooldownSurvivesRestart (executed row → close → reopen →
   still refused), TestObserveProposalRecorded (both modes, idempotent
   re-proposal, one logical action). Full suite green.
+
+## Session: RecoverOps R3 offline executor (recoverops-dev, live PENDING)
+- R3 per contract §8, offline only (Docker daemon down, kind API refused;
+  no cluster recreation per stop rules). Live kind patch + reconciliation
+  evidence explicitly PENDING, not claimed.
+- `internal/recoverops/store.go`: extended state machine VALIDATING →
+  OBSERVING → ELIGIBLE → EXECUTING → VERIFYING → RESOLVED/ESCALATED plus
+  SUPPRESSED/RECONCILING; backward-compat RECEIVED→OBSERVED kept.
+- New `internal/recoverops/executor.go` (pure decisions + transactional
+  claim): ClaimForExecution (action_key incident-scoped, idempotent),
+  MarkActionStatus, DecideOnPatchError / DecideAfterRestart /
+  DecideOnResponseLost (desired→verify, before→bounded retry, third
+  template or new UID→escalate, unknown→escalate, no loop).
+- New `executor_test.go` 8 tests: response-lost verify/retry, target
+  replacement escalate, operator conflict escalate, timeout + RV-conflict
+  retry, restart-after-intent single-action, restart-after-application
+  verify, unknown escalate. `go test ./...` 13 pkgs green, `go vet` clean.
+- New `deploy/recoverops/` (least-privilege, lab-only): ServiceAccount,
+  Role (get/update/patch deployments.apps/api-stable + get/list pods;
+  no nodes/exec/secrets/wildcards), RoleBinding, PVC 1Gi, single-replica
+  Deployment, kustomization.
+- Reused BudgetGuard/FaultLab evidence; no benchmark reruns.
+- Still TODO live: real kind patch, restart-after-intent/application on
+  cluster, conflict/timeout live paths, R4 verify + demo, portfolio demo.

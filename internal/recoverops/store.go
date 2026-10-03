@@ -23,20 +23,38 @@ var schemaDDL string
 // Incident states legal in R1. R3 extends the machine; the transition
 // table below is the single enforcement point.
 const (
-	StReceived  = "RECEIVED"
-	StResolved  = "RESOLVED"
-	StCancelled = "CANCELLED"
+	StReceived   = "RECEIVED"
+	StValidating = "VALIDATING"
+	StObserving  = "OBSERVING"
+	StEligible   = "ELIGIBLE"
+	StExecuting  = "EXECUTING"
+	StVerifying  = "VERIFYING"
+	StResolved   = "RESOLVED"
+	StEscalated  = "ESCALATED"
+	StSuppressed = "SUPPRESSED"
+	StCancelled  = "CANCELLED"
+	StReconcil   = "RECONCILING"
 )
 
 // legalTransitions is the single enforcement point for the state machine.
 // R1: RECEIVED → RESOLVED/CANCELLED. R2 adds OBSERVED (proposal recorded)
-// with resolution still allowed from it. Terminal states accept no
+// with resolution still allowed from it. R3 adds the rollback pipeline
+// VALIDATING → OBSERVING → ELIGIBLE → EXECUTING → VERIFYING →
+// RESOLVED/ESCALATED plus SUPPRESSED/RECONCILING. Terminal states accept no
 // outgoing edges: a late firing for a terminal occurrence must not reopen it.
 var legalTransitions = map[string]map[string]bool{
-	StReceived:  {StResolved: true, StCancelled: true, StObserved: true},
-	StObserved:  {StResolved: true, StCancelled: true},
-	StResolved:  {},
-	StCancelled: {},
+	StReceived:   {StValidating: true, StResolved: true, StCancelled: true, StObserved: true, StSuppressed: true},
+	StValidating: {StObserving: true, StSuppressed: true, StCancelled: true},
+	StObserving:  {StEligible: true, StSuppressed: true, StCancelled: true},
+	StEligible:   {StExecuting: true, StSuppressed: true, StCancelled: true},
+	StObserved:   {StEligible: true, StResolved: true, StCancelled: true},
+	StExecuting:  {StVerifying: true, StReconcil: true, StEscalated: true, StCancelled: true},
+	StVerifying:  {StResolved: true, StEscalated: true, StReconcil: true, StCancelled: true},
+	StReconcil:   {StExecuting: true, StVerifying: true, StEscalated: true, StResolved: true, StCancelled: true},
+	StResolved:   {},
+	StEscalated:  {},
+	StSuppressed: {},
+	StCancelled:  {},
 }
 
 // Incident is one remediation case.
