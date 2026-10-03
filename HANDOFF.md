@@ -19,7 +19,8 @@
 
 ## Current task and next exact action
 - Current: R2 committed next (this checkpoint) on `recoverops-dev`.
-  Lab idle and clean; disk ~9GiB.
+  Lab idle and clean; disk 5.4GiB free (down from 9 — Docker VM growth
+  over the live day; floor still held, watch before further long runs).
 - Next: RecoverOps R3 (conditional rollback with UID/resourceVersion
   preconditions, restart reconciliation, least-privilege RBAC) per
   contract §8 — first milestone that mutates the cluster (enforce-lab
