@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: sre-lab
+  labels:
+    app.kubernetes.io/part-of: sre-portfolio
+    app.kubernetes.io/component: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.28.1 # pinned (digest in versions.lock.json)
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yaml
+            - --storage.path=/alertmanager
+            - --cluster.listen-address=
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: auth
+              mountPath: /etc/am-auth
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: auth
+          secret:
+            secretName: recoverops-token
+            items:
+              - key: token
+                path: token

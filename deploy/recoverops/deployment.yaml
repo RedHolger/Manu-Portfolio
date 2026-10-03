@@ -21,12 +21,22 @@ spec:
       containers:
         - name: controller
           image: sre-recoverops:local
-          args: ["serve", "--db", "/data/recoverops.db", "--mode", "observe"]
+          args: ["serve", "--db", "/data/recoverops.db", "--mode", "enforce-lab",
+            "--policy", "/etc/recoverops/policy.yaml"]
           ports:
             - containerPort: 8089
+          env:
+            - name: RECOVEROPS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: recoverops-token
+                  key: token
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: policy
+              mountPath: /etc/recoverops
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /readyz
@@ -40,3 +50,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: recoverops-data
+        - name: policy
+          configMap:
+            name: recoverops-policy

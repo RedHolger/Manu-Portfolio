@@ -295,3 +295,50 @@ func TestReplayIngestPath(t *testing.T) {
 		t.Fatalf("replay: %+v", out)
 	}
 }
+
+// Genuine Alertmanager v2 envelope translates to occurrences; resolved
+// alerts in the same envelope form resolve the incident (VERIFYING→RESOLVED).
+func TestAlertmanagerEnvelopeFiringThenResolved(t *testing.T) {
+	srv, st := testServer(t)
+	fire := `{"version":"4","receiver":"recoverops","status":"firing",` +
+		`"alerts":[{"status":"firing","fingerprint":"am1",` +
+		`"startsAt":"2026-10-03T04:00:00Z","endsAt":"0001-01-01T00:00:00Z",` +
+		`"generatorURL":"http://prometheus:9090/graph",` +
+		`"labels":{"alertname":"LabBadTemplate","service":"reservations",` +
+		`"namespace":"sre-lab","deployment":"api-stable"}}]}`
+	code, out := post(t, srv, "sekret", fire)
+	if code != http.StatusAccepted {
+		t.Fatalf("envelope fire code=%d out=%v", code, out)
+	}
+	res := out["results"].([]interface{})[0].(map[string]interface{})
+	if res["result"] != "created" {
+		t.Fatalf("envelope fire: %v", res)
+	}
+	id := res["incident_id"].(string)
+	resolve := `{"version":"4","receiver":"recoverops","status":"resolved",` +
+		`"alerts":[{"status":"resolved","fingerprint":"am1",` +
+		`"startsAt":"2026-10-03T04:00:00Z","endsAt":"2026-10-03T04:06:00Z",` +
+		`"generatorURL":"http://prometheus:9090/graph",` +
+		`"labels":{"alertname":"LabBadTemplate","service":"reservations",` +
+		`"namespace":"sre-lab","deployment":"api-stable"}}]}`
+	code, out = post(t, srv, "sekret", resolve)
+	if code != http.StatusAccepted {
+		t.Fatalf("envelope resolve code=%d out=%v", code, out)
+	}
+	res = out["results"].([]interface{})[0].(map[string]interface{})
+	if res["result"] != "resolved" {
+		t.Fatalf("envelope resolve: %v", res)
+	}
+	in, _ := st.GetIncident(id)
+	if in.State != StResolved {
+		t.Fatalf("state=%s, want RESOLVED", in.State)
+	}
+}
+
+// Non-AM garbage object is still rejected.
+func TestNonArrayNonEnvelopeRejected(t *testing.T) {
+	srv, _ := testServer(t)
+	if code, _ := post(t, srv, "sekret", `{"foo":1}`); code != http.StatusBadRequest {
+		t.Fatalf("code=%d, want 400", code)
+	}
+}

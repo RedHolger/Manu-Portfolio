@@ -637,3 +637,32 @@ Status reflects executed tests and measured outcomes only.
   measured, baseline simulated +120s); 9-pair matrix PENDING.
 - Portfolio smoke: BG replay PASS, FL validate valid, RO show VERIFYING.
   No B/F benchmarks repeated.
+
+## Session: R4 genuine Alertmanager path + pilot pair (recoverops-dev, kind live)
+- Wired + pinned Alertmanager `prom/alertmanager:v0.28.1`
+  (`sha256:27c475...b15ba`): Deployment/Service/ConfigMap under
+  `deploy/alertmanager/`; demo rule `LabBadTemplate` (bad-ratio>5%/2m,
+  `for: 1m`, policy-pinned labels) in `prometheus-demo-rules`; AM target
+  in `prometheus.yml`. Burn alerts route to blackhole (all-or-nothing
+  webhook validation would otherwise poison demo batches — found live).
+- Fixed two live-found defects: (1) secret created with trailing newline
+  (`echo` vs `printf`) → 401s; (2) server spoke array-only JSON, AM sends
+  v2 envelope → added envelope adapter + 2 tests (firing+resolved,
+  garbage rejected). Burn-alert batches without target labels correctly
+  400 (policy pin enforced).
+- Controller runs in-cluster `enforce-lab` with 10s reconciler
+  (`reconcile.go`, 1 test, no-loop) + `verify` CLI; `execute` CLI for
+  manual path. `TestNoKubernetesDependency` narrowed to ingest path
+  (planned). `go test ./...` green.
+- Genuine cycle `0bc3b543` (r4-am bundle): error-0.5 degradation →
+  rule firing → AM → webhook → PROPOSED → reconciler patch →
+  VERIFYING → traffic recovery → AM resolved → RESOLVED. Restart
+  persistence confirmed. Measured windows 3x150 @100/100 → verify PASS.
+- Pilot arms: controller `70e51910` (alert 16:13:34 → acted 16:13:51 →
+  resolved 16:16:14, full journal) + baseline `e102a674` (120s hold via
+  scale-0/1, acted 16:39:59, resolved 16:42:18). Second firing properly
+  refused by 600s cooldown (valid policy evidence, `7172efbe`); later
+  arm properly refused by 3/h budget (`ce847b0c`). Matrix must space
+  executions (driver `r4-pair.sh` is budget-aware now).
+- Q3 answer: `verify` CLI is pure (no persistence); VERIFYING persists
+  until the genuine resolved webhook transitions to RESOLVED.

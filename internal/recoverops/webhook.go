@@ -29,6 +29,20 @@ type Occurrence struct {
 	Labels       map[string]string `json:"labels"`
 }
 
+// alertmanagerEnvelope is the genuine Alertmanager v2 webhook body.
+// Only the alerts array is consumed; group/common labels are ignored
+// because every alert carries its own full label set (see demo rule).
+type alertmanagerEnvelope struct {
+	Alerts []struct {
+		Status       string            `json:"status"`
+		Labels       map[string]string `json:"labels"`
+		StartsAt     string            `json:"startsAt"`
+		EndsAt       string            `json:"endsAt"`
+		GeneratorURL string            `json:"generatorURL"`
+		Fingerprint  string            `json:"fingerprint"`
+	} `json:"alerts"`
+}
+
 // Disposition reports what one occurrence did.
 type Disposition struct {
 	Fingerprint string `json:"fingerprint"`
@@ -167,8 +181,26 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 	var batch []json.RawMessage
 	if err := json.Unmarshal(raw, &batch); err != nil {
-		writeErr(w, http.StatusBadRequest, "body must be a JSON array of occurrences")
-		return
+		// Genuine Alertmanager v2 webhook envelope: {"alerts":[...]}.
+		// Translate each alert to an occurrence; the array form stays for
+		// replay/CLI compatibility.
+		var env alertmanagerEnvelope
+		if jerr := json.Unmarshal(raw, &env); jerr != nil || env.Alerts == nil {
+			writeErr(w, http.StatusBadRequest, "body must be a JSON array of occurrences")
+			return
+		}
+		batch = make([]json.RawMessage, 0, len(env.Alerts))
+		for _, a := range env.Alerts {
+			o := Occurrence{Status: a.Status, Fingerprint: a.Fingerprint,
+				StartsAt: a.StartsAt, EndsAt: a.EndsAt,
+				GeneratorURL: a.GeneratorURL, Labels: a.Labels}
+			rb, jerr := json.Marshal(o)
+			if jerr != nil {
+				writeErr(w, http.StatusBadRequest, "untranslatable alert")
+				return
+			}
+			batch = append(batch, rb)
+		}
 	}
 	if len(batch) == 0 {
 		writeErr(w, http.StatusBadRequest, "empty batch")

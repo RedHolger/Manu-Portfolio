@@ -1,0 +1,32 @@
+# One-shot known-good registration (explicit setup, run with controller at 0).
+# kubectl -n sre-lab create job ro-register --from=cronjob/... OR apply this file.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ro-register
+  namespace: sre-lab
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: recoverops
+      restartPolicy: Never
+      containers:
+        - name: register
+          image: sre-recoverops:local
+          args: ["register-good", "--db", "/data/recoverops.db",
+            "--target-uid", "sre-lab/api-stable",
+            "--template", "/etc/template/template.json"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: template
+              mountPath: /etc/template
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: recoverops-data
+        - name: template
+          configMap:
+            name: ro-template

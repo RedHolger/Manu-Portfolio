@@ -1,0 +1,24 @@
+# Demo-only Alertmanager routing (R4): ONLY LabBadTemplate reaches
+# RecoverOps. BudgetGuard burn alerts are not remediation triggers and must
+# never share a webhook batch (all-or-nothing validation would poison the
+# demo delivery): they go to the null receiver.
+global:
+  resolve_timeout: 2m
+route:
+  receiver: blackhole
+  group_by: ["alertname"]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 5m
+  routes:
+    - receiver: recoverops
+      matchers:
+        - alertname = "LabBadTemplate"
+receivers:
+  - name: blackhole
+  - name: recoverops
+    webhook_configs:
+      - url: http://recoverops.sre-lab.svc:8089/v1/alerts
+        http_config:
+          bearer_token_file: /etc/am-auth/token
+        send_resolved: true

@@ -1,0 +1,2 @@
+{"controller":{"arm":"controller","alert_at":"2026-10-03T16:50:49.685265883Z","outcome":"no-execution"},"baseline":RESOLVED
+{"arm":"baseline","incident":"e102a674645b19ec7697ed30f9a64ca9","alert_at":"2026-10-03T16:36:34.685265883Z","acted_at":"2026-10-03T16:39:59Z","resolved_at":"2026-10-03T16:42:18Z","outcome":"resolved"}}

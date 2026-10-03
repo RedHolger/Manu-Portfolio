@@ -18,7 +18,7 @@ External review: PENDING throughout; never blocks local delivery.
 | R1 | RecoverOps | ACCEPTED | 17 internal + CLI tests green on `recoverops-dev` (reopen, dup/reorder, 503, auth/schema/body rejection, no-k8s-deps); no live gate required (no cluster mutation) | — |
 | R2 | RecoverOps | ACCEPTED | Evaluation + observe/enforce proposals with refusal/cooldown-restart/budget/mismatch tests green; zero cluster writes by construction | — |
 | R3 | RecoverOps | ACCEPTED | Live kind rollback 2026-10-03 (`results/recoverops/r3-live-20261003T151252Z/`): webhook→OBSERVED/PROPOSED, UID-pinned template-only patch, replicas intact, restart persistence, 100-dup single action, fake conflict/timeout/restart suite green | — |
-| R4 | RecoverOps | IMPLEMENTED_UNVERIFIED | Verifier + 6 unit tests green; live traffic verify PASS 2026-10-03 (3x266 @100/100, gen 13/13, ready 2/2, pilot recorded in r3-live bundle); Alertmanager process absent (compatible payload used); 9-pair matrix + full demo timeline PENDING | Genuine Alertmanager path, 10-pair matrix, demo docs |
+| R4 | RecoverOps | IMPLEMENTED_UNVERIFIED | Genuine AM→webhook→rollback→RESOLVED proven 2026-10-03 (`0bc3b543`, r4-am bundle: 3x150 measured windows PASS, restart persistence); pilot pair measured (controller `70e51910` 17s alert→action, baseline `e102a674` 120s hold, both RESOLVED); cooldown/budget refusals verified as policy evidence; 10-pair matrix PENDING (budget-paced: 3 exec/h) | 10-pair matrix, demo docs |
 | Portfolio | Integration | IMPLEMENTED_UNVERIFIED | Standalone smoke 2026-10-03 (BG replay PASS, FL validate valid, RO VERIFYING; r3-live SMOKE.md); full integration demo PENDING R4 matrix | After R4 |
 
 Known issue (not a blocker, tracked): runner phase-key reuse — fault phases

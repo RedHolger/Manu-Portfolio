@@ -77,16 +77,21 @@
   action; evidence `results/recoverops/r3-live-20261003T151252Z/`.
 
 ## Current task and next exact action
-- Current: R3 ACCEPTED live; R4 IMPLEMENTED_UNVERIFIED (traffic verify
-  PASS live via `verify` CLI; Alertmanager process absent so genuine
-  AM path unproven; 1 pilot recorded, 9-pair matrix PENDING).
+- Current: R3 ACCEPTED live; R4 IMPLEMENTED_UNVERIFIED. Genuine AM path
+  proven (`0bc3b543` RESOLVED, restart-persistent); pilot pair measured
+  (controller 17s, baseline 120s hold, both RESOLVED); cooldown/budget
+  refusals verified. Matrix (10 pairs, budget-paced 3 exec/h) PENDING.
   Portfolio IMPLEMENTED_UNVERIFIED (smoke only).
+- Q3 note: `verify` CLI is a pure function (no persistence), so the
+  smoke showed VERIFYING despite `recovered`. RESOLVED persists only via
+  the genuine resolved webhook (VERIFYING→RESOLVED) or cancel API —
+  confirmed live + restart-persistent for `0bc3b543`.
 - Storage: HOLD continues (migrations untouched; untracked
   `compare-20260930T001503Z/` preserved, not evidence).
-- Next: (1) install/pin minimal Alertmanager + demo rule; (2) 9-pair
-  matrix with preserved outcomes; (3) full R4 demo timeline + portfolio
-  integration demo; then tag v1.0s. Do not repeat accepted B/F
-  benchmarks without concrete reason.
+- Next: (1) 10-pair matrix via budget-aware `scripts/r4-pair.sh`
+  (alternating order, all outcomes preserved); (2) full R4 demo timeline
+  + portfolio integration demo; then tag v1.0s. Do not repeat accepted
+  B/F benchmarks without concrete reason.
 
 ## Commands executed and exit results
 - HISTORICAL (pre-move, at `679afbd` post-restart): `go build ./...` OK;

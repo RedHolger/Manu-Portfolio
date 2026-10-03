@@ -1,0 +1,1 @@
+{"desired_present": true, "generation_hit": true, "ready_replicas": 2, "want_replicas": 2, "windows": [{"eligible": 150, "success": 150, "fast_ok": 150}, {"eligible": 150, "success": 150, "fast_ok": 150}, {"eligible": 150, "success": 150, "fast_ok": 150}]}

@@ -22,6 +22,7 @@ import (
 	"sre-portfolio/internal/recoverops"
 
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -141,6 +142,21 @@ func serve(args []string) error {
 		defer cancel()
 		_ = httpSrv.Shutdown(shut)
 	}()
+	// enforce-lab only: background reconciler executes PROPOSED proposals
+	// (one bounded ExecuteOnce per eligible incident per 10s tick).
+	// Observe mode records proposals and never mutates the cluster.
+	if cfg.Mode == "enforce-lab" {
+		if client, perr := clusterClient(log); perr != nil {
+			log.Info("reconciler disabled: no cluster client", "err", perr)
+		} else if lp, perr := recoverops.NewLivePatcher(client, cfg.Namespace); perr != nil {
+			log.Info("reconciler disabled", "err", perr)
+		} else {
+			recStop := make(chan struct{})
+			defer close(recStop)
+			go recoverops.ReconcileLoop(recStop, st, lp, cfg.Policy, log, 10*time.Second)
+			log.Info("reconciler enabled", "interval", "10s")
+		}
+	}
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
@@ -400,4 +416,14 @@ func verify(args []string) error {
 		os.Exit(2)
 	}
 	return nil
+}
+
+// clusterClient prefers in-cluster config, falling back to kubeconfig.
+func clusterClient(log *slog.Logger) (kubernetes.Interface, error) {
+	if cfg, err := rest.InClusterConfig(); err == nil {
+		log.Info("cluster client: in-cluster config")
+		return kubernetes.NewForConfig(cfg)
+	}
+	home, _ := os.UserHomeDir()
+	return kubeClient(home + "/.kube/config")
 }
