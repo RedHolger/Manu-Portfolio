@@ -1,0 +1,20 @@
+# lab-rollback.yaml — RecoverOps v1 policy (R1 structure; R2 enforces).
+# Pinned target: namespace sre-lab, Deployment api-stable. Only alerts
+# carrying the required labels select this policy; alerts never supply
+# commands or select arbitrary resources.
+apiVersion: portfolio.sre/v1
+kind: RemediationPolicy
+metadata:
+  name: lab-rollback
+spec:
+  target:
+    namespace: sre-lab
+    deployment: api-stable
+  matchLabels:
+    alertname: LabBadTemplate
+    service: reservations
+  action: restore_known_good_template
+  limits:
+    perIncident: 1
+    cooldownSeconds: 600
+    perHour: 3

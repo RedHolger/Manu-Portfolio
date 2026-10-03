@@ -13,17 +13,17 @@
   in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
-- BudgetGuard v1.0 ALL GATES ACCEPTED (2026-10-03): B-03 top-up 21/21
-  (10/10/10 full-window); B-04 demo live with correct exits; manifest
-  drift reconciled; readiness green. FaultLab v1.0 already accepted.
+- RecoverOps R1 ACCEPTED on new `recoverops-dev` branch (2026-10-03):
+  webhook ingestion + durable SQLite state, 17 internal + CLI tests green,
+  no cluster mutation (dependency-tested). BudgetGuard + FaultLab v1.0
+  already accepted.
 
 ## Current task and next exact action
-- Current: BudgetGuard v1.0 + FaultLab v1.0 accepted; tree has this
-  checkpoint uncommitted. Lab clean (8/8 Ready, stable-only, manifests ==
-  live); disk ~9GiB.
-- Next: commit, then start RecoverOps R1 on a new `recoverops-dev` branch
-  (contract §8: cmd/recoverops + internal/recoverops + migrations +
-  policy config; R1 = ingestion + durable state, no cluster mutation).
+- Current: R1 committed next (this checkpoint) on `recoverops-dev`.
+  Lab idle and clean; disk ~9GiB.
+- Next: RecoverOps R2 (policy evaluation + observe mode, zero writes in
+  observe; cooldown/limits in durable state) per contract §8, still on
+  `recoverops-dev`. No cluster mutation in R2 either.
 
 ## Commands executed and exit results
 - `go build ./...` at `679afbd` post-restart: OK (exit 0).

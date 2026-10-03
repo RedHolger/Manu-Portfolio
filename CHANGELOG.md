@@ -34,6 +34,13 @@ claims acceptance before RELEASE_STATUS.md says ACCEPTED.
   runner phases currently share one keyspace when the seed is constant
   (fix required by contract §7 — in progress).
 
-## RecoverOps (v1.0 TODO — authorized, not started)
-- Contract: RELEASE_PLAN.md §8 (R1 ingestion/state, R2 policy/observe,
-  R3 rollback/reconcile, R4 verify/demo).
+## RecoverOps (v1.0: R1 accepted, R2-R4 TODO)
+- R1 delivered: Alertmanager-compatible webhook (auth, 1MiB cap, strict
+  validation, commit-before-202, redelivery dedupe, order-safe terminal
+  handling), durable SQLite state (incidents, alert occurrences, actions,
+  known-good templates, monotonic events, persisted mode), CLI
+  (serve/policy-validate/incident-show/replay/register-good/mode).
+  No cluster mutation by construction (dependency-tested).
+- Known limitations: policy evaluation, observe/enforce behavior, rollback
+  execution and recovery verification are R2-R4 work; Alertmanager not yet
+  deployed to the lab (R4 prerequisite).

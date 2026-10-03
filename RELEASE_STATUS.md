@@ -15,7 +15,7 @@ External review: PENDING throughout; never blocks local delivery.
 | F-03 | FaultLab | ACCEPTED | Journal audit 2026-10-03: intent rows (incl. pod UID target), applied/cleared timestamps, 8 lifecycle events per run, terminals match result.json; oracle CLEAN line on disk | — |
 | F-04 | FaultLab | ACCEPTED | 10 pairs / 20 runs, alternating order, command-diff enforced, per-run reseed, 20/20 oracles CLEAN; matches contract counts exactly | — |
 | F-05 | FaultLab | ACCEPTED | Generated `report.md` + Methods section (retry sampling, final-only history, recovery/validity definitions) | — |
-| R1 | RecoverOps | TODO | No `cmd/recoverops` source | Build per contract §8 |
+| R1 | RecoverOps | ACCEPTED | 17 internal + CLI tests green on `recoverops-dev` (reopen, dup/reorder, 503, auth/schema/body rejection, no-k8s-deps); no live gate required (no cluster mutation) | — |
 | R2 | RecoverOps | TODO | — | After R1 |
 | R3 | RecoverOps | TODO | — | After R2 |
 | R4 | RecoverOps | TODO | — | After R3 |

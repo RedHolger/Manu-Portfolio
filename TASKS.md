@@ -540,3 +540,24 @@ Status reflects executed tests and measured outcomes only.
   Final readiness green (8/8 Ready, stable-only, create/replay OK).
 - BudgetGuard v1.0: all four gates ACCEPTED. Next per contract: FaultLab
   already accepted → RecoverOps R1 (new `recoverops-dev` branch).
+
+## Session: RecoverOps R1 ingestion + durable state (recoverops-dev)
+- New branch `recoverops-dev` from `af015ba`. R1 per contract §8, no stubs:
+  `cmd/recoverops` (serve/policy-validate/incident-show/replay/
+  register-good/mode), `internal/recoverops` (config, strict policy parse
+  + hash, SQLite store with embedded schema, webhook + offline ingest),
+  `migrations/recoverops/001_init.sql` (schema.sql embedded + byte-match
+  test against migrations), `configs/policies/lab-rollback.yaml`.
+- Semantics: all-or-nothing batch validation; commit-before-202 with
+  dispositions; delivery-ID dedupe; occurrence = policy+fp+startsAt;
+  unknown/out-of-order resolved never opens a case; terminal never reopens;
+  cancel→409 on terminal; persistence failure→503; 1MiB cap→413;
+  serialized processing; mode persisted; register-good canonicalizes+hashes.
+- R1 gate evidence (all passing, no cluster mutation — `go list -deps`
+  test asserts zero k8s.io deps): 17 internal tests (reopen preserves +
+  seq continuity, dup collapse, illegal transitions, register-good,
+  firing/dup/resolve/terminal-stickiness/unknown-resolved, 10 rejections,
+  batch atomicity, 503, cancel/list/show, ready/metrics, replay ingest)
+  + CLI surface tests. Full `go test ./...` green (verify at commit).
+- No new modules (modernc sqlite already pinned). Alertmanager ABSENT from
+  cluster — R4 prerequisite, not installed now (minimal scope).
