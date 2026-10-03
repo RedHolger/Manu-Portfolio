@@ -522,3 +522,21 @@ Status reflects executed tests and measured outcomes only.
   fullwindow suite patches candidate args (drops admin-addr/dep admin on
   candidate) and bumps routing version; declared-live drift to reconcile
   after B-03 (re-apply manifests + readiness re-check).
+
+## Session: B-03 top-up complete + B-04 demo live (faultlab-dev)
+- B-03 ACCEPTED: 21/21 top-up reps (seeds 1004-1010/class) perfect
+  separation — error 7 FAIL (~5% bad), slow 7 FAIL (100% slow, 0 errors),
+  healthy 7 PASS (cand ≥1446). With 1001-1003: 10/10/10 full-window, zero
+  INCONCLUSIVE/STOP/failures. SUMMARY.md rewritten to full-window-only
+  ledger (legacy groups explicitly non-counting).
+- B-04 ACCEPTED: fixed demo ran live (`results/budgetguard/20261003T045748Z/`):
+  healthy PASS/exit 0, error/slow FAIL/exit 2, exits.log matches, traffic
+  per case. First launch aborted on two latent defects (no admin pf, no
+  token export) + missing require-context — all fixed; empty aborted dir
+  left on disk. Live-found cleanup-order bug (pf killed before routing
+  reset orphaned 20% candidate): fixed, verified live 20→0 via extracted
+  function, routing restored. Suite/demo patch drift reconciled via
+  `apply -k` (candidate args+admin-addr+healthy restored, rollout clean).
+  Final readiness green (8/8 Ready, stable-only, create/replay OK).
+- BudgetGuard v1.0: all four gates ACCEPTED. Next per contract: FaultLab
+  already accepted → RecoverOps R1 (new `recoverops-dev` branch).

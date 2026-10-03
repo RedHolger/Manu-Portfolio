@@ -55,10 +55,20 @@ per-rep isolation, coverage gate enforced, watchdog armed (never tripped).
 | error (1001–1003) | — | 3 (cand ≈5% bad) | — |
 | slow (1001–1003) | — | 3 (100% slow, 0 errors) | — |
 
-## Class totals toward 10/class (exact valid counts — FINAL)
-- healthy: 5 native PASS + 5 kind PASS = **10 ✓ COMPLETE**
-- error: 5 native FAIL + 5 kind FAIL (111, 333-caveat, 666, 777, 888) = **10 ✓ COMPLETE**
-- slow: 5 native FAIL + 5 kind FAIL (111–555, pure slow signal bad=0) = **10 ✓ COMPLETE**
+## Class totals toward 10/class (FULL-WINDOW ONLY — v1 acceptance)
+Per RELEASE_PLAN.md B-03, legacy 80-second runs do not count and native/kind
+groups are not mixed. Full-window = rate 25 × 330s, coverage gate enforced,
+per-rep PG reseed + gateway/prometheus restart, kind `sre-lab`.
+- `results/budgetguard/kind-fullwindow-20260928T011047Z/` (seeds 1001–1003):
+  healthy 3 PASS, error 3 FAIL, slow 3 FAIL, zero INCONCLUSIVE.
+- `results/budgetguard/kind-fullwindow-20261003T025057Z/` (seeds 1004–1010):
+  healthy 7 PASS (cand 1446–1565, bad 0), error 7 FAIL (cand ≈5% bad),
+  slow 7 FAIL (100% slow_or_bad, 0 errors — pure slow signal),
+  zero INCONCLUSIVE, no STOP, no failures.
+- Totals: healthy **10/10** ✓, error **10/10** ✓, slow **10/10** ✓.
+- Legacy groups A (native 15/15) and B (kind short-window) below are
+  retained as preliminary short-window evidence only and contribute
+  NOTHING to the v1 counts.
 - client-error live verification: **PASS** (`kind-clienterror/decision2.json`;
   594×400s on the wire excluded, bad=0 both slots). First attempt
   INCONCLUSIVE/insufficient_traffic (980 < 1000) preserved as boundary evidence.

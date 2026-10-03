@@ -8,8 +8,8 @@ External review: PENDING throughout; never blocks local delivery.
 | Readiness | Shared lab | TODO | Last green 2026-09-30 (8/8 Ready, PG invariants, routing) | Re-run bounded readiness now |
 | B-01 | BudgetGuard | ACCEPTED | `go build`+`go test ./...` green 2026-10-03; `make test-rules` SUCCESS (10/10 fixtures, rules unchanged since `cad2f7e`) | — |
 | B-02 | BudgetGuard | ACCEPTED | Full-window 3-class in `kind-fullwindow-20260928T011047Z/` + telemetry-loss INCONCLUSIVE exit 3 with saved query evidence (`results/budgetguard/telemetry-loss-20261003T024957Z/decision.json`) | — |
-| B-03 | BudgetGuard | IN_PROGRESS | 3/10 full-window per class; top-up matrix (seeds 1004-1010/class, 21 reps) launched 2026-10-03, log `/tmp/bg-topup.log` | Live runtime window (~2.5h) |
-| B-04 | BudgetGuard | IMPLEMENTED_UNVERIFIED | Demo defects fixed offline (traffic generation + exit propagation); README scope fixed; SUMMARY + screenshots exist | Live demo run after top-up; then accept |
+| B-03 | BudgetGuard | ACCEPTED | 10/10/10 full-window (1001-1003 + 1004-1010), zero INCONCLUSIVE/STOP/failures; `results/budgetguard/kind-fullwindow-20261003T025057Z/` + matrix.md; SUMMARY.md ledger rewritten to full-window-only counts | — |
+| B-04 | BudgetGuard | ACCEPTED | Fixed demo ran live 2026-10-03: healthy PASS/exit 0, error/slow FAIL/exit 2, traffic per case (`results/budgetguard/20261003T045748Z/` + exits.log); cleanup-order bug found+fixed+verified; candidate manifest drift reconciled; README/SUMMARY honest | — |
 | F-01 | FaultLab | ACCEPTED | `go test ./...` green incl. journal/state/reconcile tests | — |
 | F-02 | FaultLab | ACCEPTED | 7 live demos in `results/faultlab/` + `EVIDENCE.md` | — |
 | F-03 | FaultLab | ACCEPTED | Journal audit 2026-10-03: intent rows (incl. pod UID target), applied/cleared timestamps, 8 lifecycle events per run, terminals match result.json; oracle CLEAN line on disk | — |

@@ -13,19 +13,17 @@
   in `679afbd`; its "commit this checkpoint" next action is DONE.
 
 ## Last completed task
-- v1 guide adoption (2026-10-03): RELEASE_PLAN.md (verbatim contract),
-  AGENTS.md three-product scope (RecoverOps authorized), RELEASE_STATUS.md,
-  BACKLOG.md, CHANGELOG.md. Gates closed: B-01 (re-verified), B-02
-  (telemetry-loss INCONCLUSIVE exit 3), F-03 (journal audit), F-04/F-05
-  (methods note). Phase-key wart fixed + tested. Readiness re-verified
-  live (PG intact across outage, create/replay/read OK).
+- BudgetGuard v1.0 ALL GATES ACCEPTED (2026-10-03): B-03 top-up 21/21
+  (10/10/10 full-window); B-04 demo live with correct exits; manifest
+  drift reconciled; readiness green. FaultLab v1.0 already accepted.
 
 ## Current task and next exact action
-- Current: adoption committed next (this checkpoint); then launch B-03
-  top-up matrix (21 reps, seeds 1004-1010/class) in background with log.
-- Next command after commit:
-  `SEEDS_ERROR="1004 1005 1006 1007 1008 1009 1010" SEEDS_SLOW="1004 1005 1006 1007 1008 1009 1010" SEEDS_HEALTHY="1004 1005 1006 1007 1008 1009 1010" nohup ./scripts/seeded-suite-fullwindow.sh > /tmp/bg-topup.log 2>&1 &`
-  Lab running idle; disk 12.5GiB; my readiness pf killed before launch.
+- Current: BudgetGuard v1.0 + FaultLab v1.0 accepted; tree has this
+  checkpoint uncommitted. Lab clean (8/8 Ready, stable-only, manifests ==
+  live); disk ~9GiB.
+- Next: commit, then start RecoverOps R1 on a new `recoverops-dev` branch
+  (contract §8: cmd/recoverops + internal/recoverops + migrations +
+  policy config; R1 = ingestion + durable state, no cluster mutation).
 
 ## Commands executed and exit results
 - `go build ./...` at `679afbd` post-restart: OK (exit 0).

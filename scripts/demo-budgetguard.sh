@@ -9,8 +9,17 @@ CFG="configs/slos/reservations.yaml"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="results/budgetguard/$TS"
 mkdir -p "$OUT"
+export LAB_ADMIN_TOKEN="$(cat .admin-token.env)"
+TOKEN="$LAB_ADMIN_TOKEN"
+./scripts/require-context.sh || exit 1
+# The demo owns its admin port-forward (the suite's forwards die with it).
+kubectl -n sre-lab port-forward deploy/labgateway 8082:8082 > "$OUT/admin-pf.log" 2>&1 &
+echo $! > "$OUT/admin-pf.pid"
+sleep 3
 
 cleanup() {
+  # Routing reset FIRST while the forward is still up (killing the pf
+  # first orphans candidate traffic at its last percent — observed live).
   # Fresh bounded context: plain curl with --max-time (never the cancelled ctx).
   curl -s --max-time 10 -X PUT "http://$ADMIN/admin/routing" \
     -H "Authorization: Bearer ${LAB_ADMIN_TOKEN:-}" \
@@ -25,6 +34,7 @@ cleanup() {
       -H 'Content-Type: application/json' \
       -d "{\"version\": $VER, \"candidatePercent\": 0}" || true
   fi
+  kill "$(cat "$OUT/admin-pf.pid" 2>/dev/null)" 2>/dev/null || true
   echo "cleanup: candidate traffic reset attempted (see $OUT/cleanup.log)"
 }
 trap cleanup EXIT INT TERM
