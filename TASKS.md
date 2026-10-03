@@ -600,3 +600,18 @@ Status reflects executed tests and measured outcomes only.
 - Reused BudgetGuard/FaultLab evidence; no benchmark reruns.
 - Still TODO live: real kind patch, restart-after-intent/application on
   cluster, conflict/timeout live paths, R4 verify + demo, portfolio demo.
+
+## Session: RecoverOps R4 offline verifier (recoverops-dev, live PENDING)
+- R4 per contract §8, offline only (same Docker-down block as R3).
+  Alertmanager-to-controller-to-k8s path, paired seeds, and demo timeline
+  explicitly PENDING.
+- New `internal/recoverops/verify.go`: pure VerifyRecovery (desired +
+  generation + ready replicas + exactly 3x10s windows ≥100 eligible,
+  ≥99% success, ≥99% fast<300ms; 180s/missing-telemetry → escalate with
+  no further action).
+- New `verify_test.go` 6 tests: recovered, thin-window fail, slow fail,
+  missing-telemetry escalate, timeout escalate, unready fail.
+- `go test ./internal/recoverops/... ./cmd/recoverops/...` green.
+- Still TODO live: healthy baseline + register-good, bad-config + load,
+  demo rule → webhook, observe vs enforce-lab, 100-dup single-action,
+  restart + conflict refusal, 1 pilot + 10 paired seeds, portfolio smoke.

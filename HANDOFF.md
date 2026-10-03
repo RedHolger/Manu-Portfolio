@@ -72,17 +72,19 @@
   `recoverops-dev@d40825c`; storage migrations stay on HOLD.
 
 ## Current task and next exact action
-- Current: R3 offline IMPLEMENTED_UNVERIFIED (2026-10-03): executor
-  claim/decisions + 8 fake tests green, `deploy/recoverops`
-  least-privilege manifests; `go test ./...` 13 pkgs green, `go vet`
-  clean. Live kind patch + reconciliation PENDING (Docker daemon down,
-  kind API refused — no cluster recreation per stop rules).
+- Current: R3 offline IMPLEMENTED_UNVERIFIED + R4 offline verifier
+  IMPLEMENTED_UNVERIFIED (2026-10-03): executor claim/decisions + 8 fake
+  tests, verifier + 6 tests, `deploy/recoverops` least-privilege
+  manifests; `go test ./...` 13 pkgs green, `go vet` clean. Live kind
+  patch + reconciliation + Alertmanager demo PENDING (Docker daemon
+  down, kind API refused — no cluster recreation per stop rules).
 - Storage: HOLD continues. MANU_DISK 93Gi avail now vs 13G at halt;
   recovery reason unexplained — does not authorize resuming moves.
 - Next: (1) bounded readiness when Docker up (`make doctor`, pods,
-  PG invariants); (2) R3 live acceptance on kind; (3) R4 verify+demo;
-  (4) portfolio integration. Do not repeat accepted B/F benchmarks
-  without concrete reason. Narrow the no-k8s test to the ingest path.
+  PG invariants); (2) R3 live acceptance on kind; (3) R4 verify+demo
+  (1 pilot + 10 paired seeds) + portfolio smoke. Do not repeat accepted
+  B/F benchmarks without concrete reason. Untracked
+  `results/faultlab/compare-20260930T001503Z/` preserved, not evidence.
 
 ## Commands executed and exit results
 - HISTORICAL (pre-move, at `679afbd` post-restart): `go build ./...` OK;

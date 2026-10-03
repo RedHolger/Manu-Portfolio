@@ -18,7 +18,7 @@ External review: PENDING throughout; never blocks local delivery.
 | R1 | RecoverOps | ACCEPTED | 17 internal + CLI tests green on `recoverops-dev` (reopen, dup/reorder, 503, auth/schema/body rejection, no-k8s-deps); no live gate required (no cluster mutation) | — |
 | R2 | RecoverOps | ACCEPTED | Evaluation + observe/enforce proposals with refusal/cooldown-restart/budget/mismatch tests green; zero cluster writes by construction | — |
 | R3 | RecoverOps | IMPLEMENTED_UNVERIFIED | Offline executor + 8 fake tests green 2026-10-03 (`executor.go`, claim/retry/verify/escalate; `deploy/recoverops` least-privilege); `go test ./...` 13 pkgs green | Live kind patch + restart/conflict/timeout reconciliation PENDING (Docker down) |
-| R4 | RecoverOps | TODO | — | After R3 |
+| R4 | RecoverOps | IMPLEMENTED_UNVERIFIED | Offline VerifyRecovery + 6 tests green 2026-10-03 (3x10s windows, 99% gates, escalate-no-action); live Alertmanager path + paired demo PENDING | Same Docker-down block as R3 |
 | Portfolio | Integration | TODO | — | After three v1.0s |
 
 Known issue (not a blocker, tracked): runner phase-key reuse — fault phases
