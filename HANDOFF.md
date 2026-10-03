@@ -1,4 +1,15 @@
-# HANDOFF — current checkpoint (BudgetGuard fixes + FaultLab acceptance)
+# HANDOFF — current checkpoint (RecoverOps R2 accepted)
+
+## Project location (moved 2026-10-03 for disk space)
+- New: `/Volumes/MANU_DISK/google/sre-portfolio` (exFAT external volume).
+- Old `~/Developer/google` (295M: repo + docs + tex) moved wholesale; source
+  path no longer exists. Local git `core.fileMode=false` set (exFAT
+  synthesizes +x on everything); AppleDouble `._*` sidecars from the move
+  were deleted (broke git pack enumeration; content verified intact).
+- Verified post-move: `git status` clean, `go build ./...` OK, recoverops +
+  faultlab suites green, SQLite WAL probe on exFAT OK.
+- NOTE: the three previously reported ZIP archives were already absent from
+  `~/Developer/google` before the move (not moved, not deleted by agent).
 
 ## Branch and last commit
 - Branch: `faultlab-dev`. HEAD: `679afbd` (durable handoff: stable AGENTS,
