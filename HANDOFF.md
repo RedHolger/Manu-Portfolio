@@ -1,5 +1,28 @@
 # HANDOFF — current checkpoint (RecoverOps R2 accepted)
 
+## Storage migration — HALTED, needs owner decision (2026-10-03)
+- Intent: move ~/Developer/{google,AnalogDevicesProjects,machineLearning,
+  UL_/ta/.venv}, ~/.cache/huggingface, 2× Spider-Man folders to MANU_DISK.
+- DONE: `google/` moved whole (295M, verified + git repaired for exFAT).
+- PARTIAL: AnalogDevicesProjects via `rsync -a --remove-source-files`
+  (resumable after a killed `mv`). Source went 8.1G → ~5.6G, then the
+  transfer was SIGTERMed gracefully for investigation (PIDs 62273/62275,
+  both exited; no -9, no unmount, no deletion).
+- PRESERVED BOTH: `~/Developer/AnalogDevicesProjects` (remainder) and
+  `/Volumes/MANU_DISK/AnalogDevicesProjects` (partial). Union is complete:
+  rsync unlinks source only after a file lands; the SIGTERM'd partial was
+  discarded at dest with its source intact. Already-moved files exist ONLY
+  on dest — acknowledged, not independently re-verifiable without re-copy.
+- DIAGNOSIS: dest free fell 66G → 13G; only ~3G is my writes. diskutil:
+  exFAT, **128 KiB allocation blocks** — small-file waste explains part
+  (216k files, many <128K). ~40G+ remains UNATTRIBUTED by bounded checks
+  (no hidden writers via lsof; .Trashes uninspectable, SIP-denied; no full
+  volume scan — exFAT scans time out). Hypotheses only, no corruption seen,
+  no I/O errors seen.
+- SAFETY HOLD: dest has ~13G free; remaining moves need ~20-25G with slack.
+  DO NOT resume moves until the owner frees dest space or picks a subset.
+  SRE benchmarks paused (nothing running; lab idle).
+
 ## Project location (moved 2026-10-03 for disk space)
 - New: `/Volumes/MANU_DISK/google/sre-portfolio` (exFAT external volume).
 - Old `~/Developer/google` (295M: repo + docs + tex) moved wholesale; source
