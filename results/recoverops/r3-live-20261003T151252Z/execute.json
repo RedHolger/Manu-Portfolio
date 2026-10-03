@@ -1,0 +1,11 @@
+{
+  "incident": "703350ec1a51073df95851f197dea801",
+  "from_state": "OBSERVED",
+  "to_state": "VERIFYING",
+  "action_status": "VERIFYING",
+  "uid": "70deacef-74e2-42fb-8750-408d3addff54",
+  "before_hash": "5b115fb332989361f497a164443685a54b2ca044c42e932e228848412a5c4e72",
+  "desired_hash": "",
+  "live_hash": "58896c497fad8d8463f7819d628a944dc31e88dba71c768bc6d0dce14eb0ca37",
+  "reason": "patched; proceed to R4 verification"
+}

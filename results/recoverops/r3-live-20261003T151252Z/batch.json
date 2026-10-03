@@ -1,0 +1,1 @@
+[{"status": "firing", "fingerprint": "r3-live-1", "startsAt": "2026-10-03T15:13:07Z", "labels": {"alertname": "LabBadTemplate", "service": "reservations", "namespace": "sre-lab", "deployment": "api-stable"}}]

@@ -70,21 +70,23 @@
   tests green, zero cluster writes. R1 also on this branch.
 - Checkpoint `dea3eb7` (2026-10-03): HANDOFF+STATUS reconciled to
   `recoverops-dev@d40825c`; storage migrations stay on HOLD.
+- R3 offline (`3c3e8a0`) + R4 offline verifier (`5e563aa`).
+- R3 LIVE ACCEPTED 2026-10-03 (kind-sre-lab): Docker started <10s,
+  cluster preserved, doctor/readiness green; webhook→OBSERVED/PROPOSED;
+  UID-pinned template-only restore; restart persistence; 100-dup single
+  action; evidence `results/recoverops/r3-live-20261003T151252Z/`.
 
 ## Current task and next exact action
-- Current: R3 offline IMPLEMENTED_UNVERIFIED + R4 offline verifier
-  IMPLEMENTED_UNVERIFIED (2026-10-03): executor claim/decisions + 8 fake
-  tests, verifier + 6 tests, `deploy/recoverops` least-privilege
-  manifests; `go test ./...` 13 pkgs green, `go vet` clean. Live kind
-  patch + reconciliation + Alertmanager demo PENDING (Docker daemon
-  down, kind API refused — no cluster recreation per stop rules).
-- Storage: HOLD continues. MANU_DISK 93Gi avail now vs 13G at halt;
-  recovery reason unexplained — does not authorize resuming moves.
-- Next: (1) bounded readiness when Docker up (`make doctor`, pods,
-  PG invariants); (2) R3 live acceptance on kind; (3) R4 verify+demo
-  (1 pilot + 10 paired seeds) + portfolio smoke. Do not repeat accepted
-  B/F benchmarks without concrete reason. Untracked
-  `results/faultlab/compare-20260930T001503Z/` preserved, not evidence.
+- Current: R3 ACCEPTED live; R4 IMPLEMENTED_UNVERIFIED (traffic verify
+  PASS live via `verify` CLI; Alertmanager process absent so genuine
+  AM path unproven; 1 pilot recorded, 9-pair matrix PENDING).
+  Portfolio IMPLEMENTED_UNVERIFIED (smoke only).
+- Storage: HOLD continues (migrations untouched; untracked
+  `compare-20260930T001503Z/` preserved, not evidence).
+- Next: (1) install/pin minimal Alertmanager + demo rule; (2) 9-pair
+  matrix with preserved outcomes; (3) full R4 demo timeline + portfolio
+  integration demo; then tag v1.0s. Do not repeat accepted B/F
+  benchmarks without concrete reason.
 
 ## Commands executed and exit results
 - HISTORICAL (pre-move, at `679afbd` post-restart): `go build ./...` OK;

@@ -1,0 +1,43 @@
+{
+  "actions": [
+    {
+      "action_key": "703350ec1a51073df95851f197dea801:restore",
+      "incident_id": "703350ec1a51073df95851f197dea801",
+      "desired_hash": "bbd499486e5d22e8c3d930041acc6d37b8b1cc5f6f80a29854d3a37f13b3beb1",
+      "status": "PROPOSED",
+      "error": "",
+      "created_at": "2026-10-03T15:13:27.627701Z",
+      "updated_at": "2026-10-03T15:13:27.627701Z"
+    }
+  ],
+  "events": [
+    {
+      "seq": 0,
+      "timestamp": "2026-10-03T15:13:27.62324Z",
+      "kind": "created",
+      "payload": "{\"labels\":{\"alertname\":\"LabBadTemplate\",\"deployment\":\"api-stable\",\"namespace\":\"sre-lab\",\"service\":\"reservations\"},\"startsAt\":\"2026-10-03T15:13:27Z\"}"
+    },
+    {
+      "seq": 1,
+      "timestamp": "2026-10-03T15:13:27.627677Z",
+      "kind": "proposal",
+      "payload": "{\"eligible\":true,\"reason\":\"eligible\",\"snapshot\":\"bbd499486e5d22e8c3d930041acc6d37b8b1cc5f6f80a29854d3a37f13b3beb1\",\"mode-status\":\"PROPOSED\"}"
+    },
+    {
+      "seq": 2,
+      "timestamp": "2026-10-03T15:13:27.62867Z",
+      "kind": "transition",
+      "payload": "{\"mode-status\":\"PROPOSED\"}"
+    }
+  ],
+  "incident": {
+    "id": "703350ec1a51073df95851f197dea801",
+    "source_key": "daa9486592f9265683c726dc1501b3abc7c9de0dbb418e76dbec76e5b010820e",
+    "target_uid": "sre-lab/api-stable",
+    "policy_hash": "dc8ed50107aaaea25123a084ff2c1da1c645a2be821f4f968d55cbc2be119a29",
+    "state": "OBSERVED",
+    "evidence": "{\"labels\":{\"alertname\":\"LabBadTemplate\",\"deployment\":\"api-stable\",\"namespace\":\"sre-lab\",\"service\":\"reservations\"},\"startsAt\":\"2026-10-03T15:13:27Z\"}",
+    "created_at": "2026-10-03T15:13:27.623156Z",
+    "updated_at": "2026-10-03T15:13:27.628636Z"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "actions": [
+    {
+      "action_key": "703350ec1a51073df95851f197dea801:restore",
+      "incident_id": "703350ec1a51073df95851f197dea801",
+      "desired_hash": "{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"2026-09-29T15:33:03+01:00\"},\"labels\":{\"app\":\"labapi\",\"slot\":\"stable\"}},\"spec\":{\"containers\":[{\"args\":[\"-addr=:8081\",\"-mode=healthy\",\"-admin-addr=127.0.0.1:8084\"],\"env\":[{\"name\":\"DATABASE_URL\",\"valueFrom\":{\"secretKeyRef\":{\"key\":\"url\",\"name\":\"postgres-url\"}}},{\"name\":\"LAB_ADMIN_TOKEN\",\"valueFrom\":{\"secretKeyRef\":{\"key\":\"token\",\"name\":\"lab-admin\"}}}],\"image\":\"sre-labapi:local\",\"imagePullPolicy\":\"IfNotPresent\",\"livenessProbe\":{\"failureThreshold\":3,\"httpGet\":{\"path\":\"/healthz\",\"port\":8081,\"scheme\":\"HTTP\"},\"periodSeconds\":5,\"successThreshold\":1,\"timeoutSeconds\":1},\"name\":\"labapi\",\"ports\":[{\"containerPort\":8081,\"protocol\":\"TCP\"}],\"readinessProbe\":{\"failureThreshold\":3,\"httpGet\":{\"path\":\"/readyz\",\"port\":8081,\"scheme\":\"HTTP\"},\"periodSeconds\":5,\"successThreshold\":1,\"timeoutSeconds\":1},\"resources\":{},\"terminationMessagePath\":\"/dev/termination-log\",\"terminationMessagePolicy\":\"File\"}],\"dnsPolicy\":\"ClusterFirst\",\"restartPolicy\":\"Always\",\"schedulerName\":\"default-scheduler\",\"securityContext\":{},\"terminationGracePeriodSeconds\":30}}",
+      "status": "EXECUTED",
+      "error": "",
+      "created_at": "2026-10-03T15:13:27.627701Z",
+      "updated_at": "2026-10-03T15:13:46.476619Z"
+    }
+  ],
+  "events": [
+    {
+      "seq": 0,
+      "timestamp": "2026-10-03T15:13:27.62324Z",
+      "kind": "created",
+      "payload": "{\"labels\":{\"alertname\":\"LabBadTemplate\",\"deployment\":\"api-stable\",\"namespace\":\"sre-lab\",\"service\":\"reservations\"},\"startsAt\":\"2026-10-03T15:13:27Z\"}"
+    },
+    {
+      "seq": 1,
+      "timestamp": "2026-10-03T15:13:27.627677Z",
+      "kind": "proposal",
+      "payload": "{\"eligible\":true,\"reason\":\"eligible\",\"snapshot\":\"bbd499486e5d22e8c3d930041acc6d37b8b1cc5f6f80a29854d3a37f13b3beb1\",\"mode-status\":\"PROPOSED\"}"
+    },
+    {
+      "seq": 2,
+      "timestamp": "2026-10-03T15:13:27.62867Z",
+      "kind": "transition",
+      "payload": "{\"mode-status\":\"PROPOSED\"}"
+    },
+    {
+      "seq": 3,
+      "timestamp": "2026-10-03T15:13:46.393797Z",
+      "kind": "claim",
+      "payload": "{\"uid\":\"70deacef-74e2-42fb-8750-408d3addff54\",\"rv\":\"217449\",\"before\":\"5b115fb33298\",\"desired\":\"{\\\"metadata\\\":\"}"
+    },
+    {
+      "seq": 4,
+      "timestamp": "2026-10-03T15:13:46.395448Z",
+      "kind": "transition",
+      "payload": "{\"by\":\"execute\"}"
+    },
+    {
+      "seq": 5,
+      "timestamp": "2026-10-03T15:13:46.408115Z",
+      "kind": "action-status",
+      "payload": "{\"status\":\"VERIFYING\",\"error\":\"\"}"
+    },
+    {
+      "seq": 6,
+      "timestamp": "2026-10-03T15:13:46.443935Z",
+      "kind": "transition",
+      "payload": "{\"by\":\"execute-patched\"}"
+    },
+    {
+      "seq": 7,
+      "timestamp": "2026-10-03T15:13:46.476712Z",
+      "kind": "action-status",
+      "payload": "{\"status\":\"EXECUTED\",\"error\":\"\"}"
+    }
+  ],
+  "incident": {
+    "id": "703350ec1a51073df95851f197dea801",
+    "source_key": "daa9486592f9265683c726dc1501b3abc7c9de0dbb418e76dbec76e5b010820e",
+    "target_uid": "sre-lab/api-stable",
+    "policy_hash": "dc8ed50107aaaea25123a084ff2c1da1c645a2be821f4f968d55cbc2be119a29",
+    "state": "VERIFYING",
+    "evidence": "{\"labels\":{\"alertname\":\"LabBadTemplate\",\"deployment\":\"api-stable\",\"namespace\":\"sre-lab\",\"service\":\"reservations\"},\"startsAt\":\"2026-10-03T15:13:27Z\"}",
+    "created_at": "2026-10-03T15:13:27.623156Z",
+    "updated_at": "2026-10-03T15:13:46.443884Z"
+  }
+}

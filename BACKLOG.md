@@ -13,6 +13,9 @@ Priority is relative within v1.1; v2 items are explicitly marked.
 - P3 Richer Grafana dashboard presentation.
 - P3 Reusable CI integration (build/test/lint entry points).
 - P2 Independent-review fixes (BG-01–BG-10 re-review of `cad2f7e`; pending).
+- P2 Unify RecoverOps template hashing (RegisterGood canonical-JSON vs
+  TemplateHash struct-marshal byte forms differ; live restore verified
+  semantically 2026-10-03; unify so hash equality proves identity).
 
 ## v2 (explicitly not v1)
 - Multiple-controller coordination (RecoverOps).

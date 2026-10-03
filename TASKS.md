@@ -615,3 +615,25 @@ Status reflects executed tests and measured outcomes only.
 - Still TODO live: healthy baseline + register-good, bad-config + load,
   demo rule → webhook, observe vs enforce-lab, 100-dup single-action,
   restart + conflict refusal, 1 pilot + 10 paired seeds, portfolio smoke.
+
+## Session: RecoverOps R3 live acceptance (recoverops-dev, kind-sre-lab)
+- Docker started via open -a Docker (daemon up <10s); kind cluster
+  preserved (5d18h, no recreate); doctor exit 0; disk floor OK (19.9Gi);
+  wait-ready rollouts green; gateway create+replay same ID; metrics OK.
+- Wiring proven live (Alertmanager process absent — payload is
+  Alertmanager-compatible): POST /v1/alerts → incident OBSERVED +
+  PROPOSED action (desired_hash == registered known-good) in
+  `results/recoverops/r3-live-20261003T151252Z/`.
+- Controlled bad change: env R3_BAD=1 via kubectl strategic patch (context
+  enforced), rollout green. `recoverops execute` → OBSERVED→VERIFYING,
+  UID-pinned 70deacef, template-only restore (replicas 2/2 untouched),
+  R3_BAD removed; semantic restore verified (image/env/metadata equal;
+  hash-form mismatch = canonicalization debt → BACKLOG P2).
+- Restart: server killed, DB reopened → VERIFYING + 1 EXECUTED persist;
+  live UID unchanged → verify path (no re-patch).
+- 100/100 duplicate live deliveries → same incident, exactly 1 action.
+- R4 traffic: labload 800/800 p99 11.7ms; 3x266 @100%/100% → `verify`
+  CLI recovered. Gen 13/13, ready 2/2. Pilot pair recorded (controller
+  measured, baseline simulated +120s); 9-pair matrix PENDING.
+- Portfolio smoke: BG replay PASS, FL validate valid, RO show VERIFYING.
+  No B/F benchmarks repeated.

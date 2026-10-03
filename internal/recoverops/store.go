@@ -47,7 +47,7 @@ var legalTransitions = map[string]map[string]bool{
 	StValidating: {StObserving: true, StSuppressed: true, StCancelled: true},
 	StObserving:  {StEligible: true, StSuppressed: true, StCancelled: true},
 	StEligible:   {StExecuting: true, StSuppressed: true, StCancelled: true},
-	StObserved:   {StEligible: true, StResolved: true, StCancelled: true},
+	StObserved:   {StEligible: true, StExecuting: true, StResolved: true, StCancelled: true},
 	StExecuting:  {StVerifying: true, StReconcil: true, StEscalated: true, StCancelled: true},
 	StVerifying:  {StResolved: true, StEscalated: true, StReconcil: true, StCancelled: true},
 	StReconcil:   {StExecuting: true, StVerifying: true, StEscalated: true, StResolved: true, StCancelled: true},

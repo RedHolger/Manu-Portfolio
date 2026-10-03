@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -12,12 +13,35 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"sre-portfolio/internal/recoverops"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
+
+var kubeClient = func(kubeconfig string) (kubernetes.Interface, error) {
+	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
+}
+
+func execCommand(name string, args ...string) (string, error) {
+	var out bytes.Buffer
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out.String()), nil
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -28,6 +52,10 @@ func main() {
 	switch os.Args[1] {
 	case "serve":
 		err = serve(os.Args[2:])
+	case "execute":
+		err = execute(os.Args[2:])
+	case "verify":
+		err = verify(os.Args[2:])
 	case "policy":
 		err = policy(os.Args[2:])
 	case "incident":
@@ -51,6 +79,8 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `recoverops serve --db FILE [--addr :8089] [--policy FILE] [--mode observe|enforce-lab]
   token via RECOVEROPS_TOKEN env (required)
+recoverops execute --db FILE --incident ID [--kubeconfig PATH] [--policy FILE]
+  single conditional rollback (enforce-lab only, kind-sre-lab only)
 recoverops policy validate --policy FILE
 recoverops incident show --db FILE --id ID [--events]
 recoverops replay --db FILE --policy FILE --file BATCH.json
@@ -301,5 +331,73 @@ func mode(args []string) error {
 		return err
 	}
 	fmt.Printf("mode=%s (applies at next serve start)\n", rest[0])
+	return nil
+}
+
+func execute(args []string) error {
+	fs := flag.NewFlagSet("execute", flag.ContinueOnError)
+	dbPath := fs.String("db", "", "SQLite path")
+	incident := fs.String("incident", "", "incident ID")
+	kubeconfig := fs.String("kubeconfig", "", "kubeconfig path (default ~/.kube/config)")
+	polPath := fs.String("policy", "configs/policies/lab-rollback.yaml", "policy file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dbPath == "" || *incident == "" {
+		return fmt.Errorf("--db and --incident are required")
+	}
+	if *kubeconfig == "" {
+		home, _ := os.UserHomeDir()
+		*kubeconfig = home + "/.kube/config"
+	}
+	if out, err := execCommand("kubectl", "config", "current-context"); err != nil || out != "kind-sre-lab" {
+		return fmt.Errorf("refusing: context %q != dedicated kind-sre-lab", out)
+	}
+	pol, err := recoverops.LoadPolicy(*polPath)
+	if err != nil {
+		return err
+	}
+	st, err := openStore(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	client, err := kubeClient(*kubeconfig)
+	if err != nil {
+		return err
+	}
+	p, err := recoverops.NewLivePatcher(client, pol.Namespace)
+	if err != nil {
+		return err
+	}
+	res, err := recoverops.ExecuteOnce(st, p, pol, *incident)
+	raw, _ := json.MarshalIndent(res, "", "  ")
+	fmt.Println(string(raw))
+	return err
+}
+
+func verify(args []string) error {
+	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
+	file := fs.String("file", "", "VerifyInput JSON file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return fmt.Errorf("--file required")
+	}
+	raw, err := os.ReadFile(*file)
+	if err != nil {
+		return err
+	}
+	var in recoverops.VerifyInput
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return fmt.Errorf("bad input: %w", err)
+	}
+	out := recoverops.VerifyRecovery(in)
+	rawOut, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Println(string(rawOut))
+	if !out.Recovered {
+		os.Exit(2)
+	}
 	return nil
 }

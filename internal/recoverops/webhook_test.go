@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -247,18 +247,28 @@ func TestReadyAndMetrics(t *testing.T) {
 	}
 }
 
-// R1 performs no cluster mutation: the recoverops binaries must not depend
-// on any Kubernetes client package. (R3 introduces client-go for the
-// rollback executor; this test must then narrow to the ingest path.)
+// R1 performs no cluster mutation on the ingest path: the webhook/store/
+// config/policy/evaluate sources must not import any Kubernetes client
+// package. (R3 adds client-go for the rollback executor in k8s.go +
+// execute.go only; this test narrows to the ingest path per plan.)
 func TestNoKubernetesDependency(t *testing.T) {
-	for _, pkg := range []string{"sre-portfolio/internal/recoverops", "sre-portfolio/cmd/recoverops"} {
-		out, err := exec.Command("go", "list", "-deps", pkg).Output()
+	entries, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	allow := map[string]bool{"k8s.go": true, "execute.go": true}
+	for _, f := range entries {
+		if strings.HasSuffix(f, "_test.go") || allow[f] {
+			continue
+		}
+		raw, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "k8s.io/") {
-				t.Fatalf("%s depends on %s", pkg, line)
+		for _, line := range strings.Split(string(raw), "\n") {
+			s := strings.TrimSpace(line)
+			if strings.Contains(s, "k8s.io/") {
+				t.Fatalf("%s imports Kubernetes client (%s) — ingest path must stay k8s-free", f, s)
 			}
 		}
 	}
