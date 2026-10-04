@@ -38,7 +38,7 @@ data:
         rules:
           - alert: LabBadTemplate
             expr: |
-              (1 - (sum by (service) (rate(lab_requests_total{result="success",service="reservations"}[2m])) / sum by (service) (rate(lab_requests_total{result!="client_error",service="reservations"}[2m])))) > 0.05
+              (1 - (sum by (service) (rate(lab_requests_total{result="success",service="reservations",slot="stable"}[2m])) / sum by (service) (rate(lab_requests_total{result!="client_error",service="reservations",slot="stable"}[2m])))) > 0.05
             for: 1m
             labels:
               alertname: LabBadTemplate

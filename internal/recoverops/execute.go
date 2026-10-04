@@ -1,13 +1,12 @@
-// execute.go — R3 single-rollback driver (live path used by CLI).
-// One bounded attempt, no loops, no sleeps. Cancellation stops future work
-// but never undoes an accepted patch (caller checks incident state first).
 package recoverops
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 )
 
-// ExecuteOutcome is the machine-readable result of one execute call.
 type ExecuteOutcome struct {
 	Incident string `json:"incident"`
 	From     string `json:"from_state"`
@@ -20,75 +19,130 @@ type ExecuteOutcome struct {
 	Reason   string `json:"reason"`
 }
 
-// ExecuteOnce performs one conditional template-only rollback.
-// Preconditions: incident exists and is not terminal/cancelled; a PROPOSED
-// action was recorded (enforce-lab path); known-good snapshot exists.
-func ExecuteOnce(s *Store, p *LivePatcher, pol Policy, incidentID string) (ExecuteOutcome, error) {
-	var out ExecuteOutcome
-	out.Incident = incidentID
-	in, err := s.GetIncident(incidentID)
+// ExecuteOnce always uses the persisted intent after the first claim. In
+// particular, restart never replaces the original before hash or desired bytes.
+func ExecuteOnce(s *Store, p *LivePatcher, pol Policy, id string) (ExecuteOutcome, error) {
+	out := ExecuteOutcome{Incident: id}
+	in, err := s.GetIncident(id)
 	if err != nil {
-		return out, fmt.Errorf("no such incident: %s", incidentID)
+		return out, err
 	}
 	out.From = in.State
 	if Terminal(in.State) {
-		return out, fmt.Errorf("incident is terminal (%s) — refusing", in.State)
+		return out, fmt.Errorf("terminal incident: %s", in.State)
 	}
-	if in.State == StCancelled {
-		return out, fmt.Errorf("incident cancelled — refusing future action")
+	if in.Policy != pol.Hash || in.TargetUID != TargetUID(pol) {
+		return out, fmt.Errorf("policy/target mismatch")
 	}
-	target := TargetUID(pol)
-	tmplJSON, _, _, err := s.KnownGood(target)
-	if err != nil {
-		return out, fmt.Errorf("no known-good snapshot for %s", target)
+	mode, err := s.GetMeta("mode")
+	if err != nil || mode != "enforce-lab" {
+		return out, fmt.Errorf("observe mode: execution refused")
+	}
+	if in.State == StVerifying {
+		out.To = StVerifying
+		out.Reason = "already applied; verify only"
+		return out, nil
+	}
+	if delay, e := s.GetMeta("execution_delay_seconds"); e == nil && delay == "120" {
+		created, e := time.Parse(time.RFC3339Nano, in.CreatedAt)
+		if e != nil {
+			return out, e
+		}
+		if time.Since(created) < 120*time.Second {
+			return out, fmt.Errorf("simulated-manual hold until %s", created.Add(120*time.Second).Format(time.RFC3339Nano))
+		}
 	}
 	live, _, err := p.Get(pol.Deployment)
 	if err != nil {
-		return out, fmt.Errorf("live read: %w", err)
+		return out, err
 	}
-	out.UID = live.UID
-	out.Before = live.TemplateHash
-	var desiredSpec string = tmplJSON
-	// NOTE (canonicalization debt, v1.1): RegisterGood hashes canonicalized
-	// arbitrary JSON while TemplateHash hashes struct-marshaled template —
-	// byte forms differ for identical semantics. Live restore verified
-	// semantically (image/env/metadata equal); unify hashing in v1.1.
-	out.Desired = tmplJSON
-	if err := s.ClaimForExecution(incidentID, live.UID, live.ResourceVersion, live.TemplateHash, tmplJSON); err != nil {
-		return out, fmt.Errorf("claim: %w", err)
-	}
-	if _, err := s.Transition(incidentID, StExecuting, `{"by":"execute"}`); err != nil {
-		// Legal from OBSERVED/ELIGIBLE; ELIGIBLE may already hold.
-		// If transition fails, continue only if already EXECUTING/VERIFYING.
-		if cur, gerr := s.GetIncident(incidentID); gerr != nil || (cur.State != StExecuting && cur.State != StVerifying) {
-			return out, fmt.Errorf("transition to EXECUTING: %w", err)
+	x, err := s.Intent(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		if in.State == StExecuting || in.State == StReconcil {
+			_, e := s.Transition(id, StEscalated, `{"reason":"legacy in-flight action has no immutable intent; operator reconciliation required"}`)
+			if e != nil {
+				return out, e
+			}
+			out.To = StEscalated
+			return out, fmt.Errorf("legacy execution missing intent; refused")
 		}
+		x, err = s.prepareIntent(in, pol, live)
 	}
-	after, perr := p.PatchTemplate(pol.Deployment, live.UID, live.ResourceVersion, live.TemplateHash, desiredSpec)
-	if perr != nil {
-		dec := DecideOnPatchError(perr, live, live.UID, live.TemplateHash, tmplJSON)
-		_ = s.MarkActionStatus(incidentID, ActFailed, perr.Error())
-		if dec == DecEscalat {
-			_, _ = s.Transition(incidentID, StEscalated, fmt.Sprintf(`{"reason":%q}`, perr.Error()))
-			cur, _ := s.GetIncident(incidentID)
-			out.To, out.Action, out.Reason = cur.State, ActFailed, "escalated: "+perr.Error()
-			return out, perr
+	if err != nil {
+		return out, err
+	}
+	out.UID, out.Before, out.Desired = x.UID, x.Before, x.Desired
+	escalate := func(reason string) (ExecuteOutcome, error) {
+		if _, e := s.Transition(id, StEscalated, fmt.Sprintf(`{"reason":%q}`, reason)); e != nil {
+			return out, e
 		}
-		_, _ = s.Transition(incidentID, StReconcil, fmt.Sprintf(`{"reason":%q}`, perr.Error()))
-		cur, _ := s.GetIncident(incidentID)
-		out.To, out.Action, out.Reason = cur.State, ActFailed, "reconcile: "+perr.Error()
-		return out, perr
+		if e := s.MarkActionStatus(id, ActFailed, reason); e != nil {
+			return out, e
+		}
+		out.To = StEscalated
+		out.Reason = reason
+		return out, fmt.Errorf("%s", reason)
 	}
-	out.Live = after.TemplateHash
-	_ = s.MarkActionStatus(incidentID, StVerifying, "")
-	if _, err := s.Transition(incidentID, StVerifying, `{"by":"execute-patched"}`); err != nil {
-		cur, _ := s.GetIncident(incidentID)
-		out.To = cur.State
-	} else {
+	started, err := time.Parse(time.RFC3339Nano, x.Started)
+	if err != nil {
+		return out, err
+	}
+	if time.Since(started) > 180*time.Second {
+		return escalate("execution/reconciliation deadline exceeded")
+	}
+	switch DecideAfterRestart(live, x.UID, x.Before, x.Desired) {
+	case DecEscalat:
+		return escalate("target replacement or concurrent operator edit")
+	case DecVerify:
+		if err = s.markApplied(id); err != nil {
+			return out, err
+		}
 		out.To = StVerifying
+		out.Action = ActExecuted
+		out.Live = live.TemplateHash
+		return out, nil
 	}
-	out.Action = StVerifying
-	out.Reason = "patched; proceed to R4 verification"
-	_ = s.MarkActionStatus(incidentID, ActExecuted, "")
+	if x.Attempts >= 2 {
+		return escalate("bounded patch attempts exhausted")
+	}
+	if err = s.reserveAttempt(x, live.ResourceVersion); err != nil {
+		return out, err
+	}
+	after, patchErr := p.PatchTemplate(pol.Deployment, x.UID, live.ResourceVersion, x.Before, x.Template)
+	if patchErr != nil {
+		// Every ambiguous response is reconciled against a fresh GET, including
+		// transport errors whose concrete Go type varies across API clients.
+		fresh, _, readErr := p.Get(pol.Deployment)
+		if readErr == nil {
+			switch DecideAfterRestart(fresh, x.UID, x.Before, x.Desired) {
+			case DecVerify:
+				after = fresh
+				patchErr = nil
+			case DecEscalat:
+				return escalate("concurrent change after patch error")
+			}
+		}
+		if patchErr != nil {
+			current, e := s.GetIncident(id)
+			if e != nil {
+				return out, e
+			}
+			if current.State == StExecuting {
+				if _, e = s.Transition(id, StReconcil, fmt.Sprintf(`{"error":%q}`, patchErr.Error())); e != nil {
+					return out, e
+				}
+			}
+			out.To = StReconcil
+			out.Reason = patchErr.Error()
+			return out, patchErr
+		}
+	}
+	if err = s.markApplied(id); err != nil {
+		return out, err
+	}
+	out.To = StVerifying
+	out.Action = ActExecuted
+	out.Live = after.TemplateHash
+	out.Reason = "applied; server verification pending"
 	return out, nil
 }

@@ -37,20 +37,21 @@ const (
 )
 
 // legalTransitions is the single enforcement point for the state machine.
-// R1: RECEIVED → RESOLVED/CANCELLED. R2 adds OBSERVED (proposal recorded)
+// RECEIVED may be suppressed/cancelled; only atomic verification resolves.
+// R2 adds OBSERVED (proposal recorded)
 // with resolution still allowed from it. R3 adds the rollback pipeline
 // VALIDATING → OBSERVING → ELIGIBLE → EXECUTING → VERIFYING →
 // RESOLVED/ESCALATED plus SUPPRESSED/RECONCILING. Terminal states accept no
 // outgoing edges: a late firing for a terminal occurrence must not reopen it.
 var legalTransitions = map[string]map[string]bool{
-	StReceived:   {StValidating: true, StResolved: true, StCancelled: true, StObserved: true, StSuppressed: true},
+	StReceived:   {StValidating: true, StCancelled: true, StObserved: true, StSuppressed: true},
 	StValidating: {StObserving: true, StSuppressed: true, StCancelled: true},
 	StObserving:  {StEligible: true, StSuppressed: true, StCancelled: true},
 	StEligible:   {StExecuting: true, StSuppressed: true, StCancelled: true},
-	StObserved:   {StEligible: true, StExecuting: true, StResolved: true, StCancelled: true},
+	StObserved:   {StEligible: true, StExecuting: true, StSuppressed: true, StCancelled: true},
 	StExecuting:  {StVerifying: true, StReconcil: true, StEscalated: true, StCancelled: true},
 	StVerifying:  {StResolved: true, StEscalated: true, StReconcil: true, StCancelled: true},
-	StReconcil:   {StExecuting: true, StVerifying: true, StEscalated: true, StResolved: true, StCancelled: true},
+	StReconcil:   {StExecuting: true, StVerifying: true, StEscalated: true, StCancelled: true},
 	StResolved:   {},
 	StEscalated:  {},
 	StSuppressed: {},
@@ -224,6 +225,9 @@ func (s *Store) Transition(id, to, payload string) (Incident, error) {
 	}
 	if !legalTransitions[in.State][to] {
 		return in, fmt.Errorf("illegal transition %s -> %s", in.State, to)
+	}
+	if to == StResolved {
+		return in, fmt.Errorf("RESOLVED requires atomic CompleteVerification")
 	}
 	now := utcNow()
 	if _, err := tx.Exec(`UPDATE incidents SET state=$1, updated_at=$2 WHERE id=$3`,

@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -56,10 +58,11 @@ type Summary struct {
 
 // Config for a run.
 type Config struct {
-	Rate     float64 // ops/sec
-	Duration time.Duration
-	Seed     int64
-	Timeout  time.Duration
+	Rate      float64 // ops/sec
+	Duration  time.Duration
+	Seed      int64
+	KeyPrefix string // isolates logical effects while keeping seeded fault draws comparable
+	Timeout   time.Duration
 	// CorrectnessProfile: retry 503/timeout/transport once with the same key.
 	// All three classes are safe to re-offer: the idempotency key plus
 	// request-hash compare makes effects at-most-once, so a retry can only
@@ -81,6 +84,9 @@ type Runner struct {
 
 // Run executes the schedule; returns summary. Context cancels the run.
 func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
+	if math.IsNaN(cfg.Rate) || math.IsInf(cfg.Rate, 0) || cfg.Rate <= 0 || cfg.Rate > 1e6 || cfg.Duration <= 0 || cfg.Timeout <= 0 || math.IsNaN(cfg.InvalidFraction) || cfg.InvalidFraction < 0 || cfg.InvalidFraction > 1 {
+		return Summary{}, fmt.Errorf("invalid load configuration")
+	}
 	if cfg.Workers <= 0 {
 		cfg.Workers = 32
 	}
@@ -90,6 +96,7 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var attempts []Attempt
+	var writeErr error
 	var launched, completed, dropped, transportErrs, successful int
 	var lags, lats []float64
 
@@ -117,7 +124,11 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 				mu.Unlock()
 				if rn.Out != nil {
 					raw, _ := json.Marshal(att)
-					_, _ = rn.Out.Write(append(raw, '\n'))
+					mu.Lock()
+					if _, err := rn.Out.Write(append(raw, '\n')); err != nil && writeErr == nil {
+						writeErr = err
+					}
+					mu.Unlock()
 				}
 			}
 		}()
@@ -142,6 +153,9 @@ Loop:
 			}
 			ticked++
 			opID := fmt.Sprintf("op-%d-%d", cfg.Seed, ticked)
+			if cfg.KeyPrefix != "" {
+				opID = cfg.KeyPrefix + "-" + opID
+			}
 			select {
 			case jobs <- job{opID: opID, n: ticked, planned: planned, seed: cfg.Seed}:
 			default:
@@ -179,6 +193,15 @@ Loop:
 		sum.InvalidReason = fmt.Sprintf("drop rate %.2f%% > 1%%",
 			100*float64(sum.Dropped)/float64(sum.Offered))
 	}
+	if sum.Truncated {
+		sum.Valid = false
+		sum.InvalidReason = "schedule truncated"
+	}
+	if writeErr != nil {
+		sum.Valid = false
+		sum.InvalidReason = "history write failed"
+		return sum, writeErr
+	}
 	return sum, nil
 }
 
@@ -191,6 +214,9 @@ type job struct {
 
 func (rn *Runner) once(ctx context.Context, cfg Config, j job) Attempt {
 	key := fmt.Sprintf("load-%d-%d", cfg.Seed, j.n)
+	if cfg.KeyPrefix != "" {
+		key = cfg.KeyPrefix + "-" + key
+	}
 	att := Attempt{OpID: j.opID, AttemptID: 1, PlannedAt: j.planned, StartAt: time.Now(), KeyHash: hashStr(key)}
 	sku := "demo-item"
 	if cfg.InvalidFraction > 0 {
@@ -227,7 +253,11 @@ func (rn *Runner) post(ctx context.Context, cfg Config, key string, attempt int,
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", key)
-	req.Header.Set("X-Operation-ID", fmt.Sprintf("%s-a%d", key, attempt))
+	drawKey := key
+	if cfg.KeyPrefix != "" {
+		drawKey = strings.TrimPrefix(key, cfg.KeyPrefix+"-")
+	}
+	req.Header.Set("X-Operation-ID", fmt.Sprintf("%s-a%d", drawKey, attempt))
 	req.Header.Set("X-Request-ID", fmt.Sprintf("%s-a%d", key, attempt))
 	client := rn.Client
 	if client == nil {

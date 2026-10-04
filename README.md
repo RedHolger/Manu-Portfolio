@@ -1,9 +1,10 @@
 # sre-portfolio — shared SRE lab + BudgetGuard + FaultLab (RecoverOps authorized)
 
-Status: **BudgetGuard v1.0 ACCEPTED, FaultLab v1.0 ACCEPTED, RecoverOps R1/R2/R3
-ACCEPTED, R4 in live acceptance** (release authority: `RELEASE_PLAN.md`,
-gates: `RELEASE_STATUS.md`).
-See `results/SUMMARY.md` for exact per-environment counts.
+Status: **corrected implementation delivered; new RecoverOps/portfolio live
+acceptance pending**. Start with [the corrected handoff](docs/CORRECTED_HANDOFF.md)
+and [current gates](RELEASE_STATUS.md). The commands below include historical
+examples; the handoff gives the current upgrade/demo sequence. Original raw
+results stay in the user's repository and are not bundled in the source-only ZIP.
 
 ## What this is
 - `cmd/labapi` — reservation API (PostgreSQL-backed idempotent writes;
@@ -14,7 +15,7 @@ See `results/SUMMARY.md` for exact per-environment counts.
   SLO compiler (Prometheus rules) + canary release evaluator
   (PASS exit 0 / FAIL exit 2 / INCONCLUSIVE exit 3)
 
-## Verified results (evidence, not claims)
+## Historical live results (versions recorded in their artifacts)
 - Unit: `go test ./...` all green incl. `-race`; `go vet` clean.
 - Rules: `promtool test rules monitoring/rule-tests.yaml` 9/9
   (healthy, sustained error, moderate/severe burst, slow-only, counter

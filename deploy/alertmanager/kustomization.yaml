@@ -4,3 +4,9 @@ namespace: sre-lab
 resources:
   - deployment.yaml
   - service.yaml
+configMapGenerator:
+  - name: alertmanager-config
+    files:
+      - alertmanager.yaml
+generatorOptions:
+  disableNameSuffixHash: true

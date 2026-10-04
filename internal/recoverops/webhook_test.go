@@ -152,10 +152,10 @@ func TestResolvedRequiresVerification(t *testing.T) {
 	if code != 202 {
 		t.Fatalf("resolve code=%d", code)
 	}
-	if r := out["results"].([]interface{})[0].(map[string]interface{}); r["result"] != "resolved" {
+	if r := out["results"].([]interface{})[0].(map[string]interface{}); r["result"] != "resolved-unverified" {
 		t.Fatalf("verified resolve: %v", r)
 	}
-	if in, _ := st.GetIncident(id); in.State != StResolved {
+	if in, _ := st.GetIncident(id); in.State != StVerifying {
 		t.Fatalf("state=%s, want RESOLVED", in.State)
 	}
 }
@@ -299,7 +299,7 @@ func TestNoKubernetesDependency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allow := map[string]bool{"k8s.go": true, "execute.go": true, "verifyapi.go": true}
+	allow := map[string]bool{"k8s.go": true, "execute.go": true, "verifyapi.go": true, "safety.go": true}
 	for _, f := range entries {
 		if strings.HasSuffix(f, "_test.go") || allow[f] {
 			continue

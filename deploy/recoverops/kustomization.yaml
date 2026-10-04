@@ -8,3 +8,9 @@ resources:
   - pvc.yaml
   - deployment.yaml
   - service.yaml
+configMapGenerator:
+  - name: recoverops-policy
+    files:
+      - policy.yaml
+generatorOptions:
+  disableNameSuffixHash: true

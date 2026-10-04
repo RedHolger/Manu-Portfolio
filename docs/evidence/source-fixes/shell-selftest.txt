@@ -1,0 +1,10 @@
+ok halted-absent
+ok halted-present
+SKIP: watchdog process matching unavailable (shell PID and process table disagree)
+ok context-accept
+ok context-refuse
+refusing: context 'anything' != dedicated 'kind-sre-lab'
+ok context-override-refused
+ok floor-default-2GB
+ok floor-env-override
+SELFTEST INCOMPLETE: 1 environment-dependent check skipped

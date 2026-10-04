@@ -52,6 +52,9 @@ func LoadPolicy(path string) (Policy, error) {
 	if err != nil {
 		return p, err
 	}
+	if flat["apiVersion"] != "portfolio.sre/v1" || flat["kind"] != "RemediationPolicy" {
+		return p, fmt.Errorf("unsupported policy apiVersion/kind")
+	}
 	for k := range flat {
 		if !policyKeys[k] {
 			return p, fmt.Errorf("unknown field %q", k)
@@ -87,6 +90,9 @@ func LoadPolicy(path string) (Policy, error) {
 	if p.Deployment, err = str("spec.target.deployment"); err != nil {
 		return p, err
 	}
+	if p.Deployment != WantDeployment {
+		return p, fmt.Errorf("deployment must be api-stable")
+	}
 	p.MatchLabels = map[string]string{}
 	for _, k := range []string{"spec.matchLabels.alertname", "spec.matchLabels.service"} {
 		v, err := str(k)
@@ -109,6 +115,9 @@ func LoadPolicy(path string) (Policy, error) {
 	}
 	if p.PerHour, err = num("spec.limits.perHour", 1); err != nil {
 		return p, err
+	}
+	if p.PerIncident != 1 || p.PerHour > 3 || p.CooldownSecs < 600 {
+		return p, fmt.Errorf("limits require perIncident=1, perHour<=3, cooldownSeconds>=600")
 	}
 	sum := sha256.Sum256([]byte(p.raw))
 	p.Hash = fmt.Sprintf("%x", sum)
@@ -140,7 +149,22 @@ func flattenPolicyYAML(raw string) (map[string]string, error) {
 			stack = stack[:level]
 		}
 		if strings.HasSuffix(t, ":") {
-			stack = append(stack, strings.TrimSuffix(t, ":"))
+			key := strings.TrimSuffix(t, ":")
+			full := strings.Join(append(append([]string{}, stack...), key), ".")
+			if _, ok := seen[full]; ok {
+				return nil, fmt.Errorf("duplicate mapping %s", full)
+			}
+			valid := false
+			for k := range policyKeys {
+				if strings.HasPrefix(k, full+".") {
+					valid = true
+				}
+			}
+			if !valid {
+				return nil, fmt.Errorf("unknown mapping %s", full)
+			}
+			seen[full] = i + 1
+			stack = append(stack, key)
 			continue
 		}
 		kv := strings.SplitN(t, ":", 2)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,12 @@ func promStub(t *testing.T, eligible, success, fast float64) *httptest.Server {
 		case strings.Contains(q, "result=\"success\""):
 			v = success
 		}
+		if strings.Contains(q, "min(timestamp(") {
+			v, _ = strconv.ParseFloat(r.URL.Query().Get("time"), 64)
+		}
+		if strings.Contains(q, "count_over_time") {
+			v = 2
+		}
 		fmt.Fprintf(w, `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[0,"%v"]}]}}`, v)
 	}))
 }
@@ -45,6 +52,11 @@ func testServerWithPatcher(t *testing.T, promURL string) (*Server, *Store, *Live
 		MaxBody: DefaultMaxBody, PrometheusURL: promURL}
 	srv := NewServer(cfg, st)
 	dep := fakeDeployment("uid-v", "rv-1", "good:1", 2)
+	dep.Generation = 2
+	dep.Status.ObservedGeneration = 2
+	dep.Status.UpdatedReplicas = 2
+	dep.Status.AvailableReplicas = 2
+	dep.Status.Replicas = 2
 	dep.Status.ReadyReplicas = 2
 	lp, err := NewLivePatcher(fake.NewSimpleClientset(dep), WantNamespace)
 	if err != nil {
@@ -66,24 +78,20 @@ func testServerWithPatcher(t *testing.T, promURL string) (*Server, *Store, *Live
 // RV to model the API-server revision advance on update.
 func verifyingIncidentWithExec(t *testing.T, st *Store, lp *LivePatcher, pol Policy) string {
 	t.Helper()
-	in, _, err := st.CreateIncident("occ-v", TargetUID(pol), "pol", "{}")
-	if err != nil {
+	id := executionFixture(t, st, lp, pol, "occ-v")
+	if _, err := ExecuteOnce(st, lp, pol, id); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := st.Transition(in.ID, StObserved, "{}"); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.RecordProposal(in.ID, EvalOutcome{Eligible: true, Reason: "eligible"}, ActProposed); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ExecuteOnce(st, lp, pol, in.ID); err != nil {
-		t.Fatalf("execute: %v", err)
 	}
 	dep, err := lp.Client.AppsV1().Deployments(WantNamespace).Get(t.Context(), WantDeployment, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	dep.ResourceVersion = "rv-2" // model the API-server revision advance
+	dep.Generation = 2
+	dep.Status.ObservedGeneration = 2
+	dep.Status.UpdatedReplicas = 2
+	dep.Status.AvailableReplicas = 2
+	dep.Status.Replicas = 2
 	dep.Status.ReadyReplicas = 2
 	if _, err := lp.Client.AppsV1().Deployments(WantNamespace).Update(t.Context(), dep, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
@@ -91,10 +99,13 @@ func verifyingIncidentWithExec(t *testing.T, st *Store, lp *LivePatcher, pol Pol
 	// Windows must be fully post-action: backdate the action 60s (the live
 	// driver posts verify minutes after patching).
 	past := time.Now().Add(-60 * time.Second).UTC().Format(time.RFC3339Nano)
-	if _, err := st.db.Exec(`UPDATE actions SET created_at=$1, updated_at=$1 WHERE incident_id=$2`, past, in.ID); err != nil {
+	if _, err := st.db.Exec(`UPDATE actions SET created_at=$1, updated_at=$1 WHERE incident_id=$2`, past, id); err != nil {
 		t.Fatal(err)
 	}
-	return in.ID
+	if _, err := st.db.Exec(`UPDATE execution_intents SET executed_at=? WHERE incident_id=?`, past, id); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func postVerify(t *testing.T, srv *Server, id, token string) (int, map[string]interface{}) {
@@ -172,5 +183,59 @@ func TestVerifyEndpointAuth(t *testing.T) {
 	srv, _, _ := testServerWithPatcher(t, prom.URL)
 	if code, _ := postVerify(t, srv, "x", ""); code != 401 {
 		t.Fatalf("code=%d, want 401", code)
+	}
+}
+
+func TestVerificationRequiresObservedGenerationAndSameUID(t *testing.T) {
+	for _, kind := range []string{"generation", "uid", "replicas"} {
+		t.Run(kind, func(t *testing.T) {
+			prom := promStub(t, 150, 150, 150)
+			defer prom.Close()
+			srv, st, lp := testServerWithPatcher(t, prom.URL)
+			pol := testPolicy(t)
+			id := verifyingIncidentWithExec(t, st, lp, pol)
+			dep, _ := lp.Client.AppsV1().Deployments(WantNamespace).Get(t.Context(), WantDeployment, metav1.GetOptions{})
+			switch kind {
+			case "generation":
+				dep.Status.ObservedGeneration = 1
+			case "uid":
+				dep.UID = "new"
+			case "replicas":
+				dep.Status.UpdatedReplicas = 1
+			}
+			lp.Client.AppsV1().Deployments(WantNamespace).Update(t.Context(), dep, metav1.UpdateOptions{})
+			if code, _ := postVerify(t, srv, id, "sekret"); code != 422 {
+				t.Fatalf("status=%d", code)
+			}
+		})
+	}
+}
+func TestVerificationRejectsStaleSourceAndMissingBucket(t *testing.T) {
+	for _, kind := range []string{"stale", "missing-bucket"} {
+		t.Run(kind, func(t *testing.T) {
+			prom := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query().Get("query")
+				v := 150.0
+				if strings.Contains(q, "timestamp(") {
+					v, _ = strconv.ParseFloat(r.URL.Query().Get("time"), 64)
+					if kind == "stale" {
+						v -= 21
+					}
+				}
+				if strings.Contains(q, "count_over_time") {
+					v = 2
+				}
+				if kind == "missing-bucket" && strings.HasPrefix(q, "lab_request_duration") {
+					fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[]}}`)
+					return
+				}
+				fmt.Fprintf(w, `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[0,"%v"]}]}}`, v)
+			}))
+			defer prom.Close()
+			_, err := measureWindows(prom.URL, time.Now().Add(-time.Minute), time.Now())
+			if err == nil {
+				t.Fatal("invalid telemetry accepted")
+			}
+		})
 	}
 }

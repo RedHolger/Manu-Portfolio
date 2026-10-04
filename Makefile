@@ -31,8 +31,8 @@ test-rules:
 	promtool test rules monitoring/rule-tests.yaml
 
 lab-up:
-	kubectl config use-context $(KIND_CONTEXT)
-	kubectl apply -k deploy/base
+	./scripts/require-context.sh
+	kubectl --context $(KIND_CONTEXT) -n sre-lab apply -k deploy/base
 	./scripts/wait-ready.sh
 
 smoke:
@@ -56,3 +56,14 @@ report:
 lab-down:
 	kubectl config use-context $(KIND_CONTEXT)
 	kind delete cluster --name $(KIND_CLUSTER)
+
+.PHONY: setup-recoverops register-recoverops demo-portfolio test-scripts
+setup-recoverops:
+	./scripts/setup-recoverops.sh
+register-recoverops:
+	./scripts/register-recoverops.sh
+demo-portfolio:
+	python3 scripts/demo-portfolio.py --out results/portfolio/$$(date -u +%Y%m%dT%H%M%SZ)
+test-scripts:
+	python3 -m unittest discover -s scripts -p '*_test.py'
+	./scripts/selftest.sh

@@ -5,6 +5,7 @@ package loadgen
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -258,4 +259,35 @@ func TestRetryOnceSameKey(t *testing.T) {
 			t.Fatalf("got attempt=%d code=%d", att.AttemptID, att.Code)
 		}
 	})
+}
+
+// Different experimental arms must produce new writes but identical seeded draws.
+func TestKeyPrefixSeparatesEffectsPreservesDraw(t *testing.T) {
+	var keys, draws []string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys = append(keys, r.Header.Get("Idempotency-Key"))
+		draws = append(draws, r.Header.Get("X-Operation-ID"))
+		w.WriteHeader(201)
+	}))
+	defer s.Close()
+	rn := &Runner{BaseURL: s.URL}
+	for _, prefix := range []string{"arm-a", "arm-b"} {
+		rn.once(context.Background(), Config{KeyPrefix: prefix, Timeout: time.Second}, job{opID: "op-5-1", n: 1, seed: 5, planned: time.Now()})
+	}
+	if keys[0] == keys[1] || draws[0] != draws[1] {
+		t.Fatalf("keys=%v draws=%v", keys, draws)
+	}
+}
+
+type failedWriter struct{}
+
+func (failedWriter) Write(p []byte) (int, error) { return 0, fmt.Errorf("disk full") }
+func TestEvidenceWriteFailureReturned(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(201) }))
+	defer s.Close()
+	rn := &Runner{BaseURL: s.URL, Out: failedWriter{}}
+	_, err := rn.Run(context.Background(), Config{Rate: 20, Duration: 100 * time.Millisecond, Timeout: time.Second})
+	if err == nil {
+		t.Fatal("evidence write failure hidden")
+	}
 }

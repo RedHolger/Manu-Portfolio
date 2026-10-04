@@ -1,3 +1,10 @@
+# Current checkpoint — source correction delivery, 2026-10-03
+
+Implemented/tested corrections and next live steps:
+`docs/CORRECTED_HANDOFF.md`, `RELEASE_STATUS.md`,
+`docs/evidence/source-fixes/VALIDATION.md`. This supersedes runtime claims below.
+Historical task records are retained, not asserted as current observations.
+
 # TASKS.md — milestone ledger (honest status only)
 
 ## Review-findings register (BG-01–BG-10; full text in docs/REVIEW.md)

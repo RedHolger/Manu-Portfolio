@@ -3,6 +3,7 @@
 # Run: ./scripts/selftest.sh   (no cluster, no Docker needed)
 set -u
 fails=0
+skips=0
 . ./scripts/lib.sh
 
 # 1. halted() honors STOP presence.
@@ -19,12 +20,18 @@ bash -c 'exec -a "labload-bin run" sleep 60' &
 p1=$!
 bash -c 'exec -a "/tmp/go-build999/b001/exe/labload" sleep 60' &
 p2=$!
+if ps -p "$p1" -o args= 2>/dev/null | grep -q 'labload-bin run'; then
 MIN_GB=999999 ./scripts/disk-watchdog.sh "$d/STOP" >/dev/null 2>&1
 [ -f "$d/STOP" ] || { echo "FAIL: no STOP planted"; fails=$((fails+1)); }
 sleep 1
 kill -0 "$p1" 2>/dev/null && { echo "FAIL: labload-bin form survived"; fails=$((fails+1)); kill "$p1"; }
 kill -0 "$p2" 2>/dev/null && { echo "FAIL: exe/labload form survived"; fails=$((fails+1)); kill "$p2"; }
 echo "ok watchdog-kill+stop"
+else
+  echo "SKIP: watchdog process matching unavailable (shell PID and process table disagree)"
+  skips=$((skips+1))
+  kill "$p1" "$p2" 2>/dev/null || true
+fi
 rm -rf "$d"
 
 # 3. require-context.sh with stub kubectl.
@@ -41,8 +48,8 @@ STUB_CONTEXT="prod-evil" PATH="$stub:$PATH" ./scripts/require-context.sh >/dev/n
   && { echo "FAIL: foreign context accepted"; fails=$((fails+1)); }
 echo "ok context-refuse"
 STUB_CONTEXT="anything" SRE_CONTEXT="anything" PATH="$stub:$PATH" ./scripts/require-context.sh >/dev/null \
-  || { echo "FAIL: SRE_CONTEXT override refused"; fails=$((fails+1)); }
-echo "ok context-override"
+  && { echo "FAIL: SRE_CONTEXT bypass accepted"; fails=$((fails+1)); }
+echo "ok context-override-refused"
 rm -rf "$stub"
 
 
@@ -62,4 +69,5 @@ case "$out2" in
 esac
 
 if [ "$fails" -ne 0 ]; then echo "SELFTEST FAILURES: $fails"; exit 1; fi
+if [ "$skips" -ne 0 ]; then echo "SELFTEST INCOMPLETE: $skips environment-dependent check skipped"; exit 77; fi
 echo "SELFTEST ALL PASS"

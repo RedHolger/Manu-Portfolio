@@ -140,6 +140,7 @@ type Server struct {
 func NewServer(cfg Config, store *Store) *Server {
 	s := &Server{cfg: cfg, store: store, mux: http.NewServeMux()}
 	s.mux.HandleFunc("POST /v1/alerts", s.handleAlerts)
+	s.mux.HandleFunc("GET /v1/limits", s.handleLimits)
 	s.mux.HandleFunc("GET /v1/incidents", s.handleList)
 	s.mux.HandleFunc("GET /v1/incidents/{id}", s.handleShow)
 	s.mux.HandleFunc("POST /v1/incidents/{id}/cancel", s.handleCancel)
@@ -287,6 +288,16 @@ func (s *Server) process(o Occurrence, raw json.RawMessage) (Disposition, error)
 	}
 	firing := o.Status == "firing"
 	if !knownExists {
+		if firing {
+			var resolvedCount int
+			if err := s.store.db.QueryRow(`SELECT count(*) FROM alert_events WHERE occurrence_id=? AND firing=0`, occID).Scan(&resolvedCount); err != nil {
+				return d, err
+			}
+			if resolvedCount > 0 {
+				d.Result = "ignored-resolved-occurrence"
+				return d, nil
+			}
+		}
 		if !firing {
 			// Unknown resolved: record the delivery (audit) without opening
 			// any case; it must not trigger remediation.
@@ -334,21 +345,12 @@ func (s *Server) process(o Occurrence, raw json.RawMessage) (Disposition, error)
 		// EXECUTING/RECONCILING stay open (work may be in flight).
 		switch known.State {
 		case StVerifying:
-			evs, err := s.store.Events(known.ID)
-			if err != nil {
+			if err := s.store.AppendEvent(known.ID, "resolved-unverified", `{"by":"resolved-alert","action":"none"}`); err != nil {
 				return d, err
 			}
-			if !hasKind(evs, "verified") {
-				_ = s.store.AppendEvent(known.ID, "resolved-unverified",
-					`{"by":"resolved-alert","action":"none"}`)
-				d.Result = "resolved-unverified"
-				return d, nil
-			}
-			if _, err := s.store.Transition(known.ID, StResolved, `{"by":"resolved-alert+verified"}`); err != nil {
-				return d, err
-			}
-			d.Result = "resolved"
+			d.Result = "resolved-unverified"
 			return d, nil
+
 		case StReceived, StObserved, StEligible:
 			if _, err := s.store.Transition(known.ID, StSuppressed, `{"by":"resolved-alert","reason":"cleared without verified recovery"}`); err != nil {
 				return d, err
@@ -367,6 +369,11 @@ func (s *Server) process(o Occurrence, raw json.RawMessage) (Disposition, error)
 		return d, err
 	}
 	if dup {
+		if known.State == StReceived {
+			if err := s.propose(known.ID, o); err != nil {
+				return d, err
+			}
+		}
 		d.Result = "duplicate"
 		return d, nil
 	}
@@ -460,7 +467,13 @@ func (s *Server) handleShow(w http.ResponseWriter, r *http.Request) {
 	if evs == nil {
 		evs = []Event{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"incident": in, "events": evs})
+	actions, err := s.store.ActionsFor(id)
+	if err != nil {
+		writeErr(w, 503, "persistence unavailable")
+		return
+	}
+	intent, _ := s.store.Intent(id)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"incident": in, "events": evs, "actions": actions, "intent": intent})
 }
 
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
@@ -502,7 +515,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintln(w, "recoverops_up 1")
 	_, _ = fmt.Fprintln(w, "# HELP recoverops_incidents incidents by state")
 	_, _ = fmt.Fprintln(w, "# TYPE recoverops_incidents gauge")
-	for _, st := range []string{StReceived, StResolved, StCancelled} {
+	for _, st := range []string{StReceived, StObserved, StEligible, StExecuting, StReconcil, StVerifying, StResolved, StEscalated, StSuppressed, StCancelled} {
 		_, _ = fmt.Fprintf(w, "recoverops_incidents{state=%q} %d\n", st, counts[st])
 	}
 }

@@ -1,3 +1,11 @@
+# Unreleased source fixes — 2026-10-03
+
+Durable UID-bound execution intent, execution-time budgets, conditional template
+patches, autonomous server-side recovery proof, restart/cancellation safety;
+measured paired driver, sequential demo, image/setup/registration tools; loadgen
+key isolation/write errors and stricter context/disk guards. See
+`docs/CORRECTED_HANDOFF.md`. Live acceptance pending; no release tag.
+
 # CHANGELOG.md — delivered behavior and known limitations per release.
 
 Unreleased v1.0 work is described as pending with its gate; nothing below

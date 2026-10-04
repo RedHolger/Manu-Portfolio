@@ -39,15 +39,16 @@ func splitSubcommand(argv []string) (string, []string) {
 }
 
 type runOptions struct {
-	base    string
-	rate    float64
-	dur     time.Duration
-	seed    int64
-	out     string
-	sumOut  string
-	timeout time.Duration
-	correct bool
-	invalid float64
+	base      string
+	rate      float64
+	dur       time.Duration
+	seed      int64
+	out       string
+	keyPrefix string
+	sumOut    string
+	timeout   time.Duration
+	correct   bool
+	invalid   float64
 }
 
 func parseRunOptions(args []string) (runOptions, error) {
@@ -57,6 +58,7 @@ func parseRunOptions(args []string) (runOptions, error) {
 	fs.Float64Var(&o.rate, "rate", 100, "ops/sec")
 	fs.DurationVar(&o.dur, "duration", 300*time.Second, "run duration")
 	fs.Int64Var(&o.seed, "seed", 42, "workload seed")
+	fs.StringVar(&o.keyPrefix, "key-prefix", "", "unique run/arm namespace for idempotency keys")
 	fs.StringVar(&o.out, "output", "results/run.jsonl", "JSONL attempts path")
 	fs.StringVar(&o.sumOut, "summary", "", "summary JSON path")
 	fs.DurationVar(&o.timeout, "timeout", 2*time.Second, "per-request timeout")
@@ -91,7 +93,7 @@ func run(args []string) {
 	defer f.Close()
 	rn := &loadgen.Runner{BaseURL: o.base, Out: f}
 	sum, err := rn.Run(context.Background(), loadgen.Config{
-		Rate: o.rate, Duration: o.dur, Seed: o.seed,
+		Rate: o.rate, Duration: o.dur, Seed: o.seed, KeyPrefix: o.keyPrefix,
 		Timeout: o.timeout, CorrectnessProfile: o.correct,
 		InvalidFraction: o.invalid,
 	})

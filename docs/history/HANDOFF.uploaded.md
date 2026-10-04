@@ -1,9 +1,11 @@
-# HANDOFF — current checkpoint (RecoverOps R4 implemented-unverified)
+# HANDOFF — current checkpoint (RecoverOps R2 accepted)
 
-> RECONCILED 2026-10-04 against actual Git state. Branch is
-> `recoverops-dev`, HEAD is `af24782`; follow-up RecoverOps changes are
-> uncommitted. `go test ./...` passes after fixing the server-measured
-> verification helper. No live redeploy or benchmark was run.
+> RECONCILED 2026-10-03 against actual Git state. Prior revision mixed
+> `faultlab-dev@679afbd` info with `recoverops-dev` progress. Corrected
+> below: branch is `recoverops-dev`, HEAD is `d40825c`. No tests re-run
+> in this reconciliation; last recorded greens are cited with their
+> commits. Cluster/bench state marked STALE until readiness re-check.
+
 ## Storage migration — HALTED, needs owner decision (2026-10-03)
 - Intent: move ~/Developer/{google,AnalogDevicesProjects,machineLearning,
   UL_/ta/.venv}, ~/.cache/huggingface, 2× Spider-Man folders to MANU_DISK.
@@ -39,8 +41,8 @@
   `~/Developer/google` before the move (not moved, not deleted by agent).
 
 ## Branch and last commit
-- Branch: `recoverops-dev`. HEAD: `af24782` (2026-10-03 18:26 +0100,
-  `RESOLVED requires persisted verification (verify endpoint + gating)`).
+- Branch: `recoverops-dev`. HEAD: `d40825c` (2026-10-03 15:22 +0100,
+  `HANDOFF: storage migration halted, dest accounting anomaly`).
 - Product commits on this branch: `752a02f` R1, `cc4287a` R2
   (both 2026-10-03). Move/handoff commits after R2: `a6cb6a4`,
   `dd48408`, `0837e18`, `d40825c`.
@@ -49,50 +51,53 @@
   a68b115 -> afaaa95 -> c09f331 -> 87702d4 -> af015ba (BG v1.0) ->
   752a02f (R1) -> cc4287a (R2) -> a6cb6a4 -> dd48408 -> 0837e18 ->
   d40825c`.
-- Follow-up commits after that checkpoint: `dea3eb7`, `3c3e8a0`,
-  `5e563aa`, `667ddde`, `129887d`, `648ad94`, `af24782`.
 - Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
-- `af24782` is the current committed checkpoint; the server-measured
-  verification follow-up below is not yet committed.
+- NOTE: `RELEASE_STATUS.md:3` still says `Branch: faultlab-dev` — stale,
+  needs same fix (not changed in this reconciliation).
+  (FIXED 2026-10-03 in `dea3eb7`: now `recoverops-dev`.)
 
 ## Uncommitted changes and their purpose
-- RecoverOps code/tests add server-measured Prometheus windows,
-  persisted verification gating, resource-version/replica fields, and
-  CLI/config wiring. The working tree also fixes `sumVector` to read the
-  Prometheus sample value rather than the complete `[timestamp,value]`
-  tuple.
-- `results/recoverops/pairs/pair-02/` is a completed valid RV2 pair:
-  baseline and controller both resolved with passing 3x150 windows.
-- `results/recoverops/pairs/pair-03/` contains only `floor.txt`; no arm
-  ran and it is not a valid pair.
-- `results/faultlab/compare-20260930T001503Z/` remains preserved
-  stillborn evidence; do not delete it to make status clean.
+- `?? results/faultlab/compare-20260930T001503Z/` (stillborn `set -u`
+  crash; `steps.log` + `watchdog.log` only). Nothing else:
+  `git status --short --branch` shows `## recoverops-dev` + that path.
+- Prior claim “tree clean on faultlab-dev” was STALE (referred to
+  `679afbd` era). Do not delete the stillborn dir to make status clean
+  per evidence rules; decide explicitly in next session.
 
 ## Last completed task
-- R4 persisted verification is implemented in the working tree and
-  covered by the full Go suite. The endpoint measures three consecutive
-  10s Prometheus windows itself; callers cannot supply passing counts.
-- Valid RV2 evidence currently includes pair-02; pair-01 remains
-  grandfathered RV1 evidence. Pair-03 stopped before execution.
-- R3 remains ACCEPTED live via
-  `results/recoverops/r3-live-20261003T151252Z/`; R1/R2 are ACCEPTED.
+- RecoverOps R2 ACCEPTED on `recoverops-dev` (2026-10-03): policy
+  evaluation + observe/enforce proposals, cooldown-restart/budget/mismatch
+  tests green, zero cluster writes. R1 also on this branch.
+- Checkpoint `dea3eb7` (2026-10-03): HANDOFF+STATUS reconciled to
+  `recoverops-dev@d40825c`; storage migrations stay on HOLD.
+- R3 offline (`3c3e8a0`) + R4 offline verifier (`5e563aa`).
+- R3 LIVE ACCEPTED 2026-10-03 (kind-sre-lab): Docker started <10s,
+  cluster preserved, doctor/readiness green; webhook→OBSERVED/PROPOSED;
+  UID-pinned template-only restore; restart persistence; 100-dup single
+  action; evidence `results/recoverops/r3-live-20261003T151252Z/`.
 
 ## Current task and next exact action
 - Current: R3 ACCEPTED live; R4 IMPLEMENTED_UNVERIFIED. Genuine AM path
-  proven (`0bc3b543`); persisted verification now requires live-template
-  equality plus server-measured passing windows. Matrix pair-02 is valid,
-  pair-03 is preflight-only, and pairs 04-11 are pending.
-- Matrix CHECKPOINTED after pair-02. Resume only after committing and
-  redeploying the fix, then rechecking readiness:
-  `nohup bash -c 'i=3; seed=340; for order in controller-first baseline-first controller-first baseline-first controller-first baseline-first controller-first baseline-first controller-first; do dir=results/recoverops/pairs/pair-$(printf %02d $i); mkdir -p "$dir"; ./scripts/r4-pair.sh "$dir" $seed $order >> results/recoverops/pairs/matrix.log 2>&1; i=$((i+1)); seed=$((seed+20)); done' > /tmp/matrix3.log 2>&1 &`
+  proven (`0bc3b543` RESOLVED, restart-persistent); pilot pair measured
+  (controller 17s, baseline 120s hold, both RESOLVED); pair-01 measured
+  (controller 91s, baseline ~209s incl. hold, both RESOLVED, windows
+  3x150 each). Cooldown/budget refusals verified. Matrix pairs 02-11
+  PENDING (budget-paced 3 exec/h). Portfolio IMPLEMENTED_UNVERIFIED.
+- RESOLVED-rule fix IN PROGRESS (uncommitted): resolved-alert alone must
+  not mark recovery. New: POST /v1/incidents/{id}/verify persists the
+  record (live template == known-good + VerifyRecovery pass);
+  unverified clears → SUPPRESSED. RV1 rows grandfathered only with
+  executed patch + passing windows + genuine resolved (see LEDGER.md).
+- Matrix CHECKPOINTED after pair-01 (driver stopped in budget-wait, no
+  arm active; api-stable healthy). Resume after fix+redeploy:
+  `nohup bash -c 'i=2; seed=320; for order in baseline-first controller-first baseline-first controller-first baseline-first controller-first baseline-first controller-first baseline-first controller-first; do dir=results/recoverops/pairs/pair-$(printf %02d $i); mkdir -p "$dir"; ./scripts/r4-pair.sh "$dir" $seed $order >> results/recoverops/pairs/matrix.log 2>&1; i=$((i+1)); seed=$((seed+20)); done' > /tmp/matrix2.log 2>&1 &`
   exec.log paces budget (do not delete). Pair ledger:
-  `results/recoverops/pairs/LEDGER.md`; count valid pairs and preserve
-  failures.
+  results/recoverops/pairs/LEDGER.md. Count pairs, keep failures.
 - Storage: HOLD continues (migrations untouched; untracked
   `compare-20260930T001503Z/` preserved, not evidence).
-- Next: commit and redeploy the verified fix, complete the remaining
-  matrix, then run the full R4 demo timeline and portfolio integration
-  demo. Do not repeat accepted B/F benchmarks without concrete reason.
+- Next: full R4 demo timeline + portfolio integration demo after matrix;
+  then tag v1.0s. Do not repeat accepted B/F benchmarks without concrete
+  reason.
 
 ## Commands executed and exit results
 - HISTORICAL (pre-move, at `679afbd` post-restart): `go build ./...` OK;
@@ -115,13 +120,11 @@
 - RECONCILIATION 2026-10-03: no `go test`, `make`, `kubectl`, or
   benchmark re-run. `git status`, `git log`, `df`, `ls results/*`
   read-only. `core.fileMode=false` confirmed set (exFAT).
-- RECONCILIATION 2026-10-04: `go test ./...` green and
-  `git diff --check` clean. No live redeploy or benchmark was run.
 
 ## Unexecuted tests
-- Live redeployment/re-verification of the server-measured endpoint after
-  the current fix.
-- Remaining R4 matrix pairs and Portfolio integration.
+- Readiness re-check (TODO per `RELEASE_STATUS.md:8`; last green
+  2026-09-30) — required before R3 live work.
+- RecoverOps R3/R4 (TODO) + Portfolio integration (TODO).
 - External review PENDING throughout (never blocks local delivery).
 - Live re-verification of the NEW runner pod/dep paths (unit-tested with
   fakes only; acceptance used standalone CLI connectors on older code).
@@ -155,28 +158,9 @@
   (20-run matrix + generated `report.md`).
 - `results/budgetguard/screenshots/` (2 verified Grafana captures).
 - `docs/postmortems/disk-pressure-2026-09-27.md`.
-- `results/recoverops/pairs/pair-02/` (valid RV2 pair).
-- `results/recoverops/pairs/pair-03/` (preflight-only disk-floor record).
 
 ## Unresolved decisions
 - None blocking. Open questions for the owner: approve Unity (1.6G) /
   Puppeteer (512M) cache deletion if more headroom is needed; confirm
   whether the next live window should prioritize runner-path re-verification
   or 10-per-class top-ups.
-
-## Corrected source-fix application — 2026-10-04
-- Checkpointed the pre-existing validated RecoverOps work as commit
-  `3a1a158` before applying the corrected source bundle.
-- Applied the non-overlapping portions of
-  `/Volumes/MANU_DISK/google/sre-portfolio-corrected/corrections.patch`.
-  The existing server-measured verification implementation was replaced with
-  the bundle's autonomous `VerifyIncident` implementation; historical evidence
-  directories were preserved.
-- Added durable execution intents and UID-bound registrations, conditional
-  Kubernetes template patches, controller locking/reconciliation, corrected
-  experiment/demo tooling, loadgen write-error propagation and isolated keys,
-  stricter context/disk guards, and the related deployment/migration/docs.
-- Offline validation after application: `go test ./...`, Python compilation,
-  shell syntax checks, and `git diff --check` passed. No live cluster,
-  Prometheus, Alertmanager, PostgreSQL, matrix, or portfolio acceptance was
-  run; R4 and Portfolio remain `IMPLEMENTED_UNVERIFIED`.

@@ -74,7 +74,14 @@ func podDelete(args []string) error {
 
 // kubeClient builds a clientset from kubeconfig (overridable for tests).
 var kubeClient = func(kubeconfig string) (kubernetes.Interface, error) {
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	raw, err := clientcmd.LoadFromFile(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	if raw.CurrentContext != "kind-sre-lab" {
+		return nil, fmt.Errorf("kubeconfig context must be kind-sre-lab")
+	}
+	cfg, err := clientcmd.NewDefaultClientConfig(*raw, &clientcmd.ConfigOverrides{CurrentContext: "kind-sre-lab"}).ClientConfig()
 	if err != nil {
 		return nil, err
 	}

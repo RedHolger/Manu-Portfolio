@@ -4,8 +4,6 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-
-	"k8s.io/client-go/kubernetes/fake"
 )
 
 func quietLog() *slog.Logger {
@@ -14,36 +12,12 @@ func quietLog() *slog.Logger {
 
 // Reconciler executes exactly one PROPOSED incident and leaves others alone.
 func TestReconcileOnceExecutesProposed(t *testing.T) {
-	s := testStore(t)
-	pol := Policy{Namespace: WantNamespace, Deployment: WantDeployment}
-	dep := fakeDeployment("uid-r", "rv-1", "good:1", 2)
-	cs := fake.NewSimpleClientset(dep)
-	lp, err := NewLivePatcher(cs, WantNamespace)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _, err := TemplateHash(dep.Spec.Template)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.RegisterGood(TargetUID(pol), raw); err != nil {
-		t.Fatal(err)
-	}
-	in, _, err := s.CreateIncident("occ-rec-1", TargetUID(pol), "polhash", "{}")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Transition(in.ID, StObserved, "{}"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RecordProposal(in.ID, EvalOutcome{Eligible: true, Reason: "eligible"}, ActProposed); err != nil {
-		t.Fatal(err)
-	}
+	s, lp, pol, id := safetyFixture(t)
 	exec, _ := ReconcileOnce(s, lp, pol, quietLog())
 	if exec != 1 {
 		t.Fatalf("want 1 executed, got %d", exec)
 	}
-	cur, _ := s.GetIncident(in.ID)
+	cur, _ := s.GetIncident(id)
 	if cur.State != StVerifying {
 		t.Fatalf("state %s, want VERIFYING", cur.State)
 	}

@@ -1,10 +1,19 @@
 package recoverops
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func goodWindows() []VerifyWindow {
 	w := VerifyWindow{Eligible: 120, Success: 119, FastOK: 119}
-	return []VerifyWindow{w, w, w}
+	ws := []VerifyWindow{w, w, w}
+	start := time.Now().UTC().Add(-30 * time.Second)
+	for i := range ws {
+		ws[i].Start = start.Add(time.Duration(i) * 10 * time.Second)
+		ws[i].End = ws[i].Start.Add(10 * time.Second)
+	}
+	return ws
 }
 
 func TestVerifyRecovered(t *testing.T) {

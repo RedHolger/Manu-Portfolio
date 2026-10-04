@@ -30,11 +30,16 @@ var (
 
 // TargetSnapshot is the live Deployment identity read before mutation.
 type TargetSnapshot struct {
-	UID             string `json:"uid"`
-	ResourceVersion string `json:"resource_version"`
-	TemplateHash    string `json:"template_hash"`
-	Ready           int64  `json:"ready_replicas"`
-	Want            int64  `json:"want_replicas"`
+	UID                string `json:"uid"`
+	ResourceVersion    string `json:"resource_version"`
+	TemplateHash       string `json:"template_hash"`
+	Generation         int64  `json:"generation"`
+	ObservedGeneration int64  `json:"observed_generation"`
+	Updated            int64  `json:"updated_replicas"`
+	Available          int64  `json:"available_replicas"`
+	Total              int64  `json:"replicas"`
+	Ready              int64  `json:"ready_replicas"`
+	Want               int64  `json:"want_replicas"`
 }
 
 // Patcher applies the desired pod template under preconditions.

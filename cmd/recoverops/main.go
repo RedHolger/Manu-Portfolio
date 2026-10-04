@@ -27,7 +27,14 @@ import (
 )
 
 var kubeClient = func(kubeconfig string) (kubernetes.Interface, error) {
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	raw, err := clientcmd.LoadFromFile(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	if raw.CurrentContext != recoverops.WantContextName {
+		return nil, fmt.Errorf("kubeconfig context must be kind-sre-lab")
+	}
+	cfg, err := clientcmd.NewDefaultClientConfig(*raw, &clientcmd.ConfigOverrides{CurrentContext: recoverops.WantContextName}).ClientConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +70,8 @@ func main() {
 		err = incident(os.Args[2:])
 	case "replay":
 		err = replay(os.Args[2:])
+	case "register-live":
+		err = registerLive(os.Args[2:])
 	case "register-good":
 		err = registerGood(os.Args[2:])
 	case "mode":
@@ -82,6 +91,8 @@ func usage() {
   token via RECOVEROPS_TOKEN env (required)
 recoverops execute --db FILE --incident ID [--kubeconfig PATH] [--policy FILE]
   single conditional rollback (enforce-lab only, kind-sre-lab only)
+recoverops register-live --db FILE --policy FILE --prometheus URL [--kubeconfig PATH]
+  explicitly register a healthy live UID-bound template
 recoverops policy validate --policy FILE
 recoverops incident show --db FILE --id ID [--events]
 recoverops replay --db FILE --policy FILE --file BATCH.json
@@ -103,6 +114,7 @@ func serve(args []string) error {
 	dbPath := fs.String("db", "", "SQLite path")
 	polPath := fs.String("policy", "configs/policies/lab-rollback.yaml", "policy file")
 	mode := fs.String("mode", "observe", "observe|enforce-lab")
+	delay := fs.Int("execution-delay-seconds", 0, "experiment only: 0 or 120 second simulated-manual delay from durable receipt")
 	promURL := fs.String("prometheus", recoverops.DefaultPrometheus, "Prometheus base URL for server-measured verification")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -118,13 +130,24 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *delay != 0 && *delay != 120 {
+		return fmt.Errorf("execution delay must be 0 or 120")
+	}
 	cfg.PrometheusURL = *promURL
+	unlock, err := recoverops.LockController(cfg.DBPath)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	st, err := recoverops.Open(cfg.DBPath)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 	if err := st.SetMeta("mode", cfg.Mode); err != nil {
+		return err
+	}
+	if err := st.SetMeta("execution_delay_seconds", fmt.Sprint(*delay)); err != nil {
 		return err
 	}
 	srv := recoverops.NewServer(cfg, st)
@@ -134,7 +157,7 @@ func serve(args []string) error {
 	httpSrv := &http.Server{
 		Addr: cfg.Addr, Handler: srv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
-		WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second,
+		WriteTimeout: 50 * time.Second, IdleTimeout: 60 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -145,21 +168,23 @@ func serve(args []string) error {
 		_ = httpSrv.Shutdown(shut)
 	}()
 	// enforce-lab only: background reconciler executes PROPOSED proposals
-	// (one bounded ExecuteOnce per eligible incident per 10s tick).
+	// (bounded execution and server verification on a five-second tick).
 	// Observe mode records proposals and never mutates the cluster.
 	if cfg.Mode == "enforce-lab" {
-		if client, perr := clusterClient(log); perr != nil {
-			log.Info("reconciler disabled: no cluster client", "err", perr)
-		} else if lp, perr := recoverops.NewLivePatcher(client, cfg.Namespace); perr != nil {
-			log.Info("reconciler disabled", "err", perr)
-		} else {
-			srv.SetPatcher(lp)
-			recStop := make(chan struct{})
-			defer close(recStop)
-			go recoverops.ReconcileLoop(recStop, st, lp, cfg.Policy, log, 10*time.Second)
-			log.Info("reconciler enabled", "interval", "10s")
+		client, err := clusterClient(log)
+		if err != nil {
+			return fmt.Errorf("enforce-lab requires cluster client: %w", err)
 		}
+		lp, err := recoverops.NewLivePatcher(client, cfg.Namespace)
+		if err != nil {
+			return err
+		}
+		srv.SetPatcher(lp)
+		done := make(chan struct{})
+		go func() { defer close(done); srv.RunController(ctx, log) }()
+		defer func() { stop(); <-done }()
 	}
+
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
@@ -349,7 +374,7 @@ func mode(args []string) error {
 	if err := st.SetMeta("mode", rest[0]); err != nil {
 		return err
 	}
-	fmt.Printf("mode=%s (applies at next serve start)\n", rest[0])
+	fmt.Printf("mode=%s (execution checks use this value; serve --mode overrides it at startup)\n", rest[0])
 	return nil
 }
 
@@ -376,6 +401,11 @@ func execute(args []string) error {
 	if err != nil {
 		return err
 	}
+	unlock, err := recoverops.LockController(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	st, err := openStore(*dbPath)
 	if err != nil {
 		return err
@@ -429,4 +459,56 @@ func clusterClient(log *slog.Logger) (kubernetes.Interface, error) {
 	}
 	home, _ := os.UserHomeDir()
 	return kubeClient(home + "/.kube/config")
+}
+
+func registerLive(args []string) error {
+	fs := flag.NewFlagSet("register-live", flag.ContinueOnError)
+	db := fs.String("db", "", "SQLite path")
+	polPath := fs.String("policy", "configs/policies/lab-rollback.yaml", "policy")
+	prom := fs.String("prometheus", recoverops.DefaultPrometheus, "Prometheus URL")
+	kc := fs.String("kubeconfig", "", "kubeconfig; in-cluster when omitted")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *db == "" {
+		return fmt.Errorf("--db required")
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected arguments")
+	}
+	pol, err := recoverops.LoadPolicy(*polPath)
+	if err != nil {
+		return err
+	}
+	var client kubernetes.Interface
+	if *kc != "" {
+		client, err = kubeClient(*kc)
+	} else {
+		client, err = clusterClient(slog.Default())
+	}
+	if err != nil {
+		return err
+	}
+	unlock, err := recoverops.LockController(*db)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	st, err := openStore(*db)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	lp, err := recoverops.NewLivePatcher(client, pol.Namespace)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	defer cancel()
+	hash, err := recoverops.RegisterLiveGood(ctx, st, lp, pol, *prom)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("registered live target=%s hash=%s\n", recoverops.TargetUID(pol), hash)
+	return nil
 }

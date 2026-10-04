@@ -2,8 +2,7 @@
 // Pinned to namespace sre-lab and the policy deployment (api-stable).
 // Patch replaces ONLY spec.template under UID + resourceVersion
 // preconditions; replicas and unrelated settings are never overwritten
-// (we mutate a fresh GET copy's template field and Update with the
-// expected resourceVersion for optimistic concurrency).
+// using JSON Patch tests followed by one template replacement.
 package recoverops
 
 import (
@@ -16,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -42,11 +42,19 @@ func NewLivePatcher(client kubernetes.Interface, namespace string) (*LivePatcher
 }
 
 // TemplateHash canonicalizes a pod template to JSON and hashes it. Field
-// order follows the Go struct definition (lab-grade canonicalization;
+// order follows sorted JSON map keys (lab-grade canonicalization;
 // the same function hashes both registered and live templates, so equality
 // comparisons are consistent even if not RFC-compliant canonical JSON).
 func TemplateHash(t corev1.PodTemplateSpec) (string, string, error) {
 	raw, err := json.Marshal(t)
+	if err != nil {
+		return "", "", err
+	}
+	var normalized any
+	if err := json.Unmarshal(raw, &normalized); err != nil {
+		return "", "", err
+	}
+	raw, err = json.Marshal(normalized)
 	if err != nil {
 		return "", "", err
 	}
@@ -73,8 +81,10 @@ func (p *LivePatcher) Get(deployment string) (TargetSnapshot, string, error) {
 		UID:             string(dep.UID),
 		ResourceVersion: dep.ResourceVersion,
 		TemplateHash:    hash,
-		Ready:           int64(dep.Status.ReadyReplicas),
-		Want:            wantReplicas(dep.Spec.Replicas),
+		Generation:      dep.Generation, ObservedGeneration: dep.Status.ObservedGeneration,
+		Updated: int64(dep.Status.UpdatedReplicas), Available: int64(dep.Status.AvailableReplicas), Total: int64(dep.Status.Replicas),
+		Ready: int64(dep.Status.ReadyReplicas),
+		Want:  wantReplicas(dep.Spec.Replicas),
 	}, hash, nil
 }
 
@@ -117,10 +127,22 @@ func (p *LivePatcher) PatchTemplate(deployment, expectUID, expectRV, beforeHash,
 		// Live template is a third value: concurrent operator change.
 		return TargetSnapshot{}, ErrConflictTemplate
 	}
-	// Template-only mutation on a fresh copy; replicas untouched.
-	live.Spec.Template = desired
-	live.ResourceVersion = expectRV // optimistic-concurrency precondition
-	updated, err := deps.Update(ctx, live, metav1.UpdateOptions{})
+	if liveHash == desiredHash {
+		snap, _, e := p.Get(deployment)
+		return snap, e
+	}
+	if live.ResourceVersion != expectRV {
+		return TargetSnapshot{}, ErrConflictRV
+	}
+	body, err := json.Marshal([]map[string]any{
+		{"op": "test", "path": "/metadata/uid", "value": expectUID},
+		{"op": "test", "path": "/metadata/resourceVersion", "value": expectRV},
+		{"op": "replace", "path": "/spec/template", "value": desired},
+	})
+	if err != nil {
+		return TargetSnapshot{}, err
+	}
+	updated, err := deps.Patch(ctx, deployment, types.JSONPatchType, body, metav1.PatchOptions{})
 	if err != nil {
 		return TargetSnapshot{}, err
 	}
@@ -132,8 +154,10 @@ func (p *LivePatcher) PatchTemplate(deployment, expectUID, expectRV, beforeHash,
 		UID:             string(updated.UID),
 		ResourceVersion: updated.ResourceVersion,
 		TemplateHash:    newHash,
-		Ready:           int64(updated.Status.ReadyReplicas),
-		Want:            wantReplicas(updated.Spec.Replicas),
+		Generation:      updated.Generation, ObservedGeneration: updated.Status.ObservedGeneration,
+		Updated: int64(updated.Status.UpdatedReplicas), Available: int64(updated.Status.AvailableReplicas), Total: int64(updated.Status.Replicas),
+		Ready: int64(updated.Status.ReadyReplicas),
+		Want:  wantReplicas(updated.Spec.Replicas),
 	}, nil
 }
 
@@ -148,3 +172,17 @@ func wantReplicas(r *int32) int64 {
 
 // Ensure appsv1 import is used (Deployment type reference for docs).
 var _ = appsv1.Deployment{}
+
+func (p *LivePatcher) Template(deployment string) (string, string, string, error) {
+	if deployment != WantDeployment {
+		return "", "", "", fmt.Errorf("deployment not allowlisted")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), p.Timeout)
+	defer cancel()
+	dep, err := p.Client.AppsV1().Deployments(p.Namespace).Get(ctx, deployment, metav1.GetOptions{})
+	if err != nil {
+		return "", "", "", err
+	}
+	raw, hash, err := TemplateHash(dep.Spec.Template)
+	return raw, string(dep.UID), hash, err
+}

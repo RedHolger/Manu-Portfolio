@@ -239,9 +239,17 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	term, rerr := r.Run(ctx, cfg, runID)
-	row, _ := j.GetRun(runID)
-	raw, _ := json.Marshal(map[string]any{"run": runID, "terminal": term, "state": row.State})
-	_ = os.WriteFile(f.out+"/result.json", append(raw, '\n'), 0o644)
+	row, journalErr := j.GetRun(runID)
+	if journalErr != nil {
+		return fmt.Errorf("run error %v; read result: %w", rerr, journalErr)
+	}
+	raw, marshalErr := json.Marshal(map[string]any{"run": runID, "terminal": term, "state": row.State})
+	if marshalErr != nil {
+		return marshalErr
+	}
+	if writeErr := os.WriteFile(f.out+"/result.json", append(raw, '\n'), 0o644); writeErr != nil {
+		return fmt.Errorf("run error %v; save result: %w", rerr, writeErr)
+	}
 	fmt.Printf("run %s -> %s\n", runID, term)
 	return rerr
 }

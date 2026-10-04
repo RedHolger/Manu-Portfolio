@@ -24,7 +24,11 @@ func TestSchemaMatchesMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(mig) != schemaDDL {
+	extra, err := os.ReadFile("../../migrations/recoverops/002_execution_safety.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(mig)+string(extra) != schemaDDL {
 		t.Fatal("internal/recoverops/schema.sql drifted from migrations/recoverops/001_init.sql")
 	}
 }
@@ -96,8 +100,11 @@ func TestIllegalTransitionsRejected(t *testing.T) {
 	if _, err := st.Transition(in.ID, StReceived, "{}"); err == nil {
 		t.Fatal("self-transition must be rejected")
 	}
-	res, err := st.Transition(in.ID, StResolved, "{}")
-	if err != nil || res.State != StResolved {
+	if _, err := st.Transition(in.ID, StResolved, "{}"); err == nil {
+		t.Fatal("unverified resolve allowed")
+	}
+	res, err := st.Transition(in.ID, StSuppressed, "{}")
+	if err != nil || res.State != StSuppressed {
 		t.Fatalf("resolve: %v %+v", err, res)
 	}
 	if _, err := st.Transition(in.ID, StReceived, "{}"); err == nil {

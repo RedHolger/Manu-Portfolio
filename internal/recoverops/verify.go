@@ -7,14 +7,21 @@
 // live adapter supplies snapshots and windows from k8s + Prometheus.
 package recoverops
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"time"
+)
 
 // VerifyWindow is one 10s traffic sample.
 type VerifyWindow struct {
-	Eligible  int64   `json:"eligible"`
-	Success   int64   `json:"success"`
-	FastOK    int64   `json:"fast_ok"`
-	SuccessRt float64 `json:"success_rate"`
+	Start     time.Time `json:"start"`
+	End       time.Time `json:"end"`
+	Estimated bool      `json:"estimated"`
+	Eligible  float64   `json:"eligible"`
+	Success   float64   `json:"success"`
+	FastOK    float64   `json:"fast_ok"`
+	SuccessRt float64   `json:"success_rate"`
 }
 
 // VerifyInput is the observed post-patch state.
@@ -55,8 +62,14 @@ func VerifyRecovery(in VerifyInput) VerifyOutcome {
 		return VerifyOutcome{Reason: fmt.Sprintf("need exactly 3 nonoverlapping 10s windows, got %d", len(in.Windows))}
 	}
 	for i, w := range in.Windows {
+		if math.IsNaN(w.Eligible) || math.IsNaN(w.Success) || math.IsNaN(w.FastOK) || math.IsInf(w.Eligible, 0) || math.IsInf(w.Success, 0) || math.IsInf(w.FastOK, 0) || w.FastOK < 0 || w.Success < w.FastOK || w.Eligible < w.Success {
+			return VerifyOutcome{Reason: "invalid or inconsistent window counts"}
+		}
+		if w.Start.IsZero() || w.End.Sub(w.Start) != 10*time.Second || (i > 0 && !w.Start.Equal(in.Windows[i-1].End)) {
+			return VerifyOutcome{Reason: "windows must be timestamped consecutive nonoverlapping 10s intervals"}
+		}
 		if w.Eligible < 100 {
-			return VerifyOutcome{Reason: fmt.Sprintf("window %d: only %d eligible, need >=100", i, w.Eligible)}
+			return VerifyOutcome{Reason: fmt.Sprintf("window %d: only %g eligible, need >=100", i, w.Eligible)}
 		}
 		if float64(w.Success)/float64(w.Eligible) < 0.99 {
 			return VerifyOutcome{Reason: fmt.Sprintf("window %d: success %.3f < 0.99", i, float64(w.Success)/float64(w.Eligible))}

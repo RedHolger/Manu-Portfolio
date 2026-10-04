@@ -59,7 +59,10 @@ func (c *Client) QueryRange(ctx context.Context, expr string, at time.Time, step
 // or matrix — pass the same envelope + sample validation (H2: the release
 // gate's instant path previously skipped both checks).
 func (c *Client) QueryMatrix(ctx context.Context, expr string, start, end time.Time, step time.Duration) ([]Series, error) {
-	u, _ := url.Parse(c.BaseURL + "/api/v1/query_range")
+	u, err := url.Parse(c.BaseURL + "/api/v1/query_range")
+	if err != nil {
+		return nil, err
+	}
 	q := u.Query()
 	q.Set("query", expr)
 	q.Set("start", strconv.FormatInt(start.Unix(), 10))
@@ -78,9 +81,12 @@ func (c *Client) QueryMatrix(ctx context.Context, expr string, start, end time.T
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("prometheus status %d", resp.StatusCode)
 	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.MaxBody))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.MaxBody+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(raw)) > c.MaxBody {
+		return nil, errors.New("prometheus response exceeds size cap")
 	}
 	var env QueryResponse
 	if err := json.Unmarshal(raw, &env); err != nil {
@@ -133,7 +139,10 @@ func checkSamples(series []Series) error {
 
 // Query runs an instant query (used for freshness checks).
 func (c *Client) Query(ctx context.Context, expr string, at time.Time) ([]Series, error) {
-	u, _ := url.Parse(c.BaseURL + "/api/v1/query")
+	u, err := url.Parse(c.BaseURL + "/api/v1/query")
+	if err != nil {
+		return nil, err
+	}
 	q := u.Query()
 	q.Set("query", expr)
 	q.Set("time", strconv.FormatInt(at.Unix(), 10))
@@ -150,9 +159,12 @@ func (c *Client) Query(ctx context.Context, expr string, at time.Time) ([]Series
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("prometheus status %d", resp.StatusCode)
 	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.MaxBody))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.MaxBody+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(raw)) > c.MaxBody {
+		return nil, errors.New("prometheus response exceeds size cap")
 	}
 	var env QueryResponse
 	if err := json.Unmarshal(raw, &env); err != nil {

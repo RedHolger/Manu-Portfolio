@@ -9,10 +9,11 @@
 set -u
 STOP="$1"
 MIN_GB="${MIN_GB:-${2:-2}}"
+python3 -c 'import math,sys; n=float(sys.argv[1]); sys.exit(0 if math.isfinite(n) and n>=2 else 1)' "$MIN_GB" || { echo "floor must be at least 2GiB" >&2; exit 1; }
 STEP="${WATCH_STEP:-${3:-10}}"
 while true; do
   sleep "$STEP"
-  free_gb=$(python3 -c 'import shutil; print(round(shutil.disk_usage("/").free / 1e9, 2))')
+  free_gb=$(python3 -c 'import shutil; print(min(shutil.disk_usage("/").free, shutil.disk_usage(".").free) / (1024**3))')
   low=$(python3 -c "print('yes' if float('$free_gb') < float('$MIN_GB') else 'no')")
   if [ "$low" = "yes" ]; then
     echo "WATCHDOG: ${free_gb}GiB < ${MIN_GB}GiB floor — killing load, planting STOP" >&2

@@ -14,12 +14,12 @@ import (
 // ReconcileOnce scans for executable proposals and runs at most one
 // ExecuteOnce per eligible incident. Returns counts for metrics/logs.
 func ReconcileOnce(s *Store, p *LivePatcher, pol Policy, log *slog.Logger) (executed, escalated int) {
-	list, err := s.ListIncidents(100, 0)
+	list, err := s.PendingIncidents()
 	if err != nil {
 		return 0, 0
 	}
 	for _, in := range list {
-		if in.State != StObserved && in.State != StEligible {
+		if in.State != StObserved && in.State != StEligible && in.State != StExecuting && in.State != StReconcil {
 			continue
 		}
 		acts, err := s.ActionsFor(in.ID)
@@ -32,7 +32,7 @@ func ReconcileOnce(s *Store, p *LivePatcher, pol Policy, log *slog.Logger) (exec
 				proposed = true
 			}
 		}
-		if !proposed {
+		if !proposed && in.State != StExecuting && in.State != StReconcil {
 			continue
 		}
 		out, err := ExecuteOnce(s, p, pol, in.ID)

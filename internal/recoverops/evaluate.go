@@ -92,10 +92,7 @@ func checkLimits(s *Store, pol Policy, target string, now time.Time) (bool, stri
 // count of executions in [cut, now] for target chain bookkeeping. R2/R3
 // record executions with status EXECUTED; proposals never consume budget.
 func (s *Store) ExecutedSince(target string, cut time.Time) (time.Time, int64, error) {
-	rows, err := s.db.Query(`SELECT a.created_at FROM actions a
-		JOIN incidents i ON i.id = a.incident_id
-		WHERE a.status=$1 AND i.target_uid=$2 AND a.created_at >= $3
-		ORDER BY a.created_at DESC`, ActExecuted, target, cut.UTC().Format(time.RFC3339Nano))
+	rows, err := s.db.Query(budgetReservationsSQL, target, target)
 	if err != nil {
 		return time.Time{}, 0, err
 	}
@@ -114,6 +111,9 @@ func (s *Store) ExecutedSince(target string, cut time.Time) (time.Time, int64, e
 			if err != nil {
 				return time.Time{}, 0, err
 			}
+		}
+		if t.Before(cut) {
+			continue
 		}
 		if last.IsZero() || t.After(last) {
 			last = t

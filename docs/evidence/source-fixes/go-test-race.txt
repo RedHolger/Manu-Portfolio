@@ -1,0 +1,14 @@
+ok  	sre-portfolio/cmd/budgetguard	(cached)
+ok  	sre-portfolio/cmd/faultlab	1.349s
+ok  	sre-portfolio/cmd/labapi	1.097s
+?   	sre-portfolio/cmd/labgateway	[no test files]
+ok  	sre-portfolio/cmd/labload	7.014s
+ok  	sre-portfolio/cmd/recoverops	1.110s
+ok  	sre-portfolio/internal/budgetguard	1.043s
+ok  	sre-portfolio/internal/clock	(cached)
+ok  	sre-portfolio/internal/faultlab	42.537s
+ok  	sre-portfolio/internal/gateway	(cached)
+ok  	sre-portfolio/internal/loadgen	7.591s
+ok  	sre-portfolio/internal/recoverops	2.493s
+ok  	sre-portfolio/internal/telemetry	1.021s
+ok  	sre-portfolio/internal/workload	(cached)
