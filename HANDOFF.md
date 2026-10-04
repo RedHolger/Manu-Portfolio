@@ -1,9 +1,9 @@
 # HANDOFF — current checkpoint (RecoverOps R4 implemented-unverified)
 
 > RECONCILED 2026-10-04 against actual Git state. Branch is
-> `recoverops-dev`, HEAD is `af24782`; follow-up RecoverOps changes are
-> uncommitted. `go test ./...` passes after fixing the server-measured
-> verification helper. No live redeploy or benchmark was run.
+> `recoverops-dev`, HEAD is `45066b3`; corrected source fixes are committed.
+> `go test ./...`, vet, targeted race tests, Python compilation, shell syntax
+> checks, and `git diff --check` pass. No live redeploy or benchmark was run.
 ## Storage migration — HALTED, needs owner decision (2026-10-03)
 - Intent: move ~/Developer/{google,AnalogDevicesProjects,machineLearning,
   UL_/ta/.venv}, ~/.cache/huggingface, 2× Spider-Man folders to MANU_DISK.
@@ -52,8 +52,8 @@
 - Follow-up commits after that checkpoint: `dea3eb7`, `3c3e8a0`,
   `5e563aa`, `667ddde`, `129887d`, `648ad94`, `af24782`.
 - Baselines preserved: `0fe8b77` (master), `cad2f7e` (correctness-fixes).
-- `af24782` is the current committed checkpoint; the server-measured
-  verification follow-up below is not yet committed.
+- `45066b3` is the current committed corrected-source checkpoint; preserved
+  result directories remain untracked and unstaged.
 
 ## Uncommitted changes and their purpose
 - RecoverOps code/tests add server-measured Prometheus windows,
