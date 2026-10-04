@@ -14,10 +14,17 @@ type Config struct {
 	Mode      string // observe | enforce-lab (R1 persists; R2 enforces)
 	MaxBody   int64  // webhook body cap (default 1MiB)
 	Namespace string // pinned lab namespace (from policy)
+	// PrometheusURL feeds server-measured verification windows (R4);
+	// defaults to the in-cluster Prometheus.
+	PrometheusURL string
 }
 
 // DefaultMaxBody caps webhook bodies at 1MiB (contract §8 R1).
 const DefaultMaxBody = 1 << 20
+
+// DefaultPrometheus is the in-cluster Prometheus for server-measured
+// verification windows (R4). Overridden by --prometheus in tests/demos.
+const DefaultPrometheus = "http://prometheus.sre-lab.svc:9090"
 
 // LoadConfig validates serve flags. Enforce mode is restricted to the
 // dedicated lab namespace; anything else is refused before listening.
@@ -40,6 +47,7 @@ func LoadConfig(addr, dbPath, policyPath, token, mode string) (Config, error) {
 	// the policy itself (LoadPolicy refuses anything but sre-lab). R2/R3
 	// gate actual mutations; R1 performs none.
 	c = Config{Addr: addr, DBPath: dbPath, Policy: pol, Token: token,
-		Mode: mode, MaxBody: DefaultMaxBody, Namespace: pol.Namespace}
+		Mode: mode, MaxBody: DefaultMaxBody, Namespace: pol.Namespace,
+		PrometheusURL: DefaultPrometheus}
 	return c, nil
 }

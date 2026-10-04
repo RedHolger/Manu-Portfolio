@@ -34,7 +34,7 @@ claims acceptance before RELEASE_STATUS.md says ACCEPTED.
   runner phases currently share one keyspace when the seed is constant
   (fix required by contract §7 — in progress).
 
-## RecoverOps (v1.0: R1+R2 accepted, R3-R4 TODO)
+## RecoverOps (v1.0: R1-R3 accepted, R4 implemented-unverified)
 - R1 delivered: Alertmanager-compatible webhook (auth, 1MiB cap, strict
   validation, commit-before-202, redelivery dedupe, order-safe terminal
   handling), durable SQLite state (incidents, alert occurrences, actions,
@@ -46,6 +46,10 @@ claims acceptance before RELEASE_STATUS.md says ACCEPTED.
   rows surviving restart), OBSERVED/PROPOSED proposal records
   (observe vs enforce-lab), incident-scoped single-action key, actions in
   incident show. Live already-known-good comparison deferred to R3.
-- Known limitations: rollback execution, restart reconciliation and
-  recovery verification are R3-R4 work; Alertmanager not yet
-  deployed to the lab (R4 prerequisite).
+- R3 delivered and accepted live: UID-pinned template-only rollback,
+  restart reconciliation, duplicate-delivery idempotency, and least-
+  privilege lab deployment.
+- R4 delivered but not yet accepted: genuine Alertmanager path,
+  reconciler, cooldown/budget refusals, and persisted verification with
+  server-measured Prometheus windows. The 10-pair matrix and portfolio
+  integration demo remain incomplete.

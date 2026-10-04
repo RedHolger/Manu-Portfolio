@@ -666,3 +666,19 @@ Status reflects executed tests and measured outcomes only.
   executions (driver `r4-pair.sh` is budget-aware now).
 - Q3 answer: `verify` CLI is pure (no persistence); VERIFYING persists
   until the genuine resolved webhook transitions to RESOLVED.
+
+## Session: R4 persisted verification and matrix continuation (recoverops-dev)
+- HEAD at inspection: `af24782`; working tree contains the follow-up
+  server-measured verification implementation and tests.
+- Verification API now queries Prometheus for three consecutive,
+  non-overlapping 10s windows after the recorded execution, checks the
+  live template against the known-good snapshot, requires resource-version
+  advance/readiness, and persists `verified` before RESOLVED. Caller-
+  supplied counts were removed.
+- Matrix evidence: pair-02 completed with baseline and controller both
+  `RESOLVED`, both verify records passing 3x150 windows. Pair-03 contains
+  only a disk-floor preflight record and is not a pair. Remaining matrix
+  work is pending.
+- Validation: `go test ./...` PASS; `git diff --check` PASS. The test run
+  caught a real tuple/value parsing bug in `sumVector`; fixed in the
+  working tree. No live redeploy or benchmark was run.

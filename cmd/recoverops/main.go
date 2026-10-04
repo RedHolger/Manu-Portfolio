@@ -103,6 +103,7 @@ func serve(args []string) error {
 	dbPath := fs.String("db", "", "SQLite path")
 	polPath := fs.String("policy", "configs/policies/lab-rollback.yaml", "policy file")
 	mode := fs.String("mode", "observe", "observe|enforce-lab")
+	promURL := fs.String("prometheus", recoverops.DefaultPrometheus, "Prometheus base URL for server-measured verification")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -117,6 +118,7 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	cfg.PrometheusURL = *promURL
 	st, err := recoverops.Open(cfg.DBPath)
 	if err != nil {
 		return err

@@ -73,8 +73,12 @@ func (p *LivePatcher) Get(deployment string) (TargetSnapshot, string, error) {
 		UID:             string(dep.UID),
 		ResourceVersion: dep.ResourceVersion,
 		TemplateHash:    hash,
+		Ready:           int64(dep.Status.ReadyReplicas),
+		Want:            wantReplicas(dep.Spec.Replicas),
 	}, hash, nil
 }
+
+// wantReplicas defaults nil to 1 (kubectl convention).
 
 // PatchTemplate restores the desired pod template under preconditions.
 // beforeHash is the template observed at claim time; desiredJSON/hash is the
@@ -128,10 +132,19 @@ func (p *LivePatcher) PatchTemplate(deployment, expectUID, expectRV, beforeHash,
 		UID:             string(updated.UID),
 		ResourceVersion: updated.ResourceVersion,
 		TemplateHash:    newHash,
+		Ready:           int64(updated.Status.ReadyReplicas),
+		Want:            wantReplicas(updated.Spec.Replicas),
 	}, nil
 }
 
 func hashEquals(a, b string) bool { return a == b }
+
+func wantReplicas(r *int32) int64 {
+	if r == nil {
+		return 1
+	}
+	return int64(*r)
+}
 
 // Ensure appsv1 import is used (Deployment type reference for docs).
 var _ = appsv1.Deployment{}

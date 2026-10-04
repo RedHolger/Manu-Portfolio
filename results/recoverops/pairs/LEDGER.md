@@ -35,7 +35,15 @@ second arm of a pair).
 - baseline `e7d6f92a`: alert 17:14:34 → 120s hold → acted 17:18:03 →
   resolved 17:20:23. Windows 311-313: 3x150 @100/100.
 
-## Matrix pairs 02-11 (RV2; pending at ledger creation)
-- pairs/pair-02..pair-11: seeds 320..500 step 20, alternating
-  (02 baseline-first). Resume: `nohup /tmp/matrix-run.sh` equivalent for
-  remaining pairs — see HANDOFF.md resume command. exec.log paces 3/h.
+## Matrix pair-02 (RV2)
+- baseline `dc37d21d`: alert 17:40:49 → acted 17:44:16 →
+  resolved 17:44:53. Windows 321-323: 3x150 @100/100.
+- controller `5a31630e`: alert 18:05:04 → acted 18:06:27 →
+  resolved 18:06:59. Windows 331-333: 3x150 @100/100.
+
+## Matrix pairs 03-11 (RV2; pending)
+- Pair-03 stopped at disk-floor preflight; no arm ran and it does not
+  count as a pair.
+- pairs/pair-04..pair-11: seeds 360..500 step 20, alternating. Resume:
+  see HANDOFF.md; exec.log paces 3/h. Count valid pairs and preserve
+  failures.

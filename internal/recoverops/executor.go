@@ -33,6 +33,8 @@ type TargetSnapshot struct {
 	UID             string `json:"uid"`
 	ResourceVersion string `json:"resource_version"`
 	TemplateHash    string `json:"template_hash"`
+	Ready           int64  `json:"ready_replicas"`
+	Want            int64  `json:"want_replicas"`
 }
 
 // Patcher applies the desired pod template under preconditions.

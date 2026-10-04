@@ -155,7 +155,9 @@ func (s *Store) RecordProposal(incidentID string, out EvalOutcome, actionStatus 
 type ActionRow struct {
 	Key       string `json:"action_key"`
 	Incident  string `json:"incident_id"`
+	Before    string `json:"before_hash"`
 	Desired   string `json:"desired_hash"`
+	RV        string `json:"resource_version"`
 	Status    string `json:"status"`
 	Error     string `json:"error"`
 	CreatedAt string `json:"created_at"`
@@ -165,8 +167,8 @@ type ActionRow struct {
 // ActionsFor lists the action rows of one incident (at most one logical
 // action by key design, plus any superseded history in R3).
 func (s *Store) ActionsFor(incidentID string) ([]ActionRow, error) {
-	rows, err := s.db.Query(`SELECT action_key, incident_id, desired_hash,
-		status, error, created_at, updated_at FROM actions
+	rows, err := s.db.Query(`SELECT action_key, incident_id, before_hash, desired_hash,
+		resource_version, status, error, created_at, updated_at FROM actions
 		WHERE incident_id=$1 ORDER BY created_at`, incidentID)
 	if err != nil {
 		return nil, err
@@ -175,8 +177,8 @@ func (s *Store) ActionsFor(incidentID string) ([]ActionRow, error) {
 	var out []ActionRow
 	for rows.Next() {
 		var a ActionRow
-		if err := rows.Scan(&a.Key, &a.Incident, &a.Desired, &a.Status,
-			&a.Error, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.Key, &a.Incident, &a.Before, &a.Desired, &a.RV,
+			&a.Status, &a.Error, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
