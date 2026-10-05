@@ -1,3 +1,13 @@
+# Unreleased source fixes — 2026-10-05 (recorded-evidence review follow-ups)
+
+BudgetGuard coverage gap measured between consecutive present buckets
+((worst+1)*step: one empty 15s bucket = 30s inter-sample gap > 20s limit);
+FaultLab recovery decoupled from the abort threshold (independent 5%
+`MaxRecoveryFailureRatio` + ≥3 successful 2xx requests, so `AbortMax=1.0`
+and all-4xx recoveries can no longer pass). Regression tests fail on the
+prior code and pass on the fix; `go test ./...` green; no live lab rerun
+(docker down), so IMPLEMENTED_UNVERIFIED against the lab.
+
 # Unreleased source fixes — 2026-10-03
 
 Durable UID-bound execution intent, execution-time budgets, conditional template

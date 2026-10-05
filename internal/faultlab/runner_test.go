@@ -37,6 +37,9 @@ type labDouble struct {
 	// which lets a test break exactly one phase (phase key namespaces are
 	// disjoint: recovery uses load-<seed+2000000>-N).
 	breakPrefix atomic.Pointer[string]
+	// breakStatus is served to breakPrefix requests (default 500); a test
+	// can set 400 to prove answered-but-never-successful recovery fails.
+	breakStatus atomic.Int64
 }
 
 func newLabDouble(t *testing.T, slot string, failEvery int) *labDouble {
@@ -65,7 +68,11 @@ lab_requests_total{service="reservations",slot=%q,route="/v1/reservations",resul
 			strings.HasPrefix(r.Header.Get("Idempotency-Key"), *p) {
 			d.total.Add(1)
 			d.failed.Add(1)
-			w.WriteHeader(http.StatusInternalServerError)
+			code := int(d.breakStatus.Load())
+			if code == 0 {
+				code = http.StatusInternalServerError
+			}
+			w.WriteHeader(code)
 			_, _ = w.Write([]byte(`{"error":"still broken"}`))
 			return
 		}
@@ -532,6 +539,65 @@ func TestRecoveryUnhealthyFailsRun(t *testing.T) {
 	}
 	if !sawRecovery {
 		t.Fatalf("phases.json has no recovery phase: %s", raw)
+	}
+}
+
+// A permissive abort threshold must not leak into recovery: with
+// AbortMax=1.0 no failure ratio ever exceeds the abort bound, so the old
+// `h.Ratio > sc.AbortMax` check let a 100% failed recovery phase PASS.
+// Recovery carries its own budget (MaxRecoveryFailureRatio).
+func TestRecoveryAllFailWithPermissiveAbortFails(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	prefix := fmt.Sprintf("load-%d-", testScenario().Seed+phaseSeedOffset("recovery"))
+	d.breakPrefix.Store(&prefix)
+	r, j, _ := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	sc.AbortMax = 1.0 // must-not-abort fault experiments still need a strict recovery
+
+	term, err := r.Run(context.Background(), sc, "run-permissive-abort")
+	if err == nil {
+		t.Fatal("expected failure: 100% failed recovery must not pass with AbortMax=1.0")
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED", term)
+	}
+	row, _ := j.GetRun("run-permissive-abort")
+	if row.State != StFailed {
+		t.Fatalf("journal=%s, want FAILED", row.State)
+	}
+	kinds := eventKinds(t, j, "run-permissive-abort")
+	if hasEvent(kinds, "recovery-ok") {
+		t.Fatalf("recovery-ok recorded for a 100%% failed recovery: %v", kinds)
+	}
+	if !hasEvent(kinds, "recovery-failed") {
+		t.Fatalf("recovery-failed missing: %v", kinds)
+	}
+}
+
+// Answered is not recovered: an all-4xx recovery phase has failure ratio 0
+// under any threshold, but zero successful (2xx) requests prove nothing
+// about the restored service.
+func TestRecoveryWithoutSuccessesFails(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	prefix := fmt.Sprintf("load-%d-", testScenario().Seed+phaseSeedOffset("recovery"))
+	d.breakPrefix.Store(&prefix)
+	d.breakStatus.Store(http.StatusBadRequest)
+	r, j, _ := testRunner(t, d.srv.URL)
+	sc := testScenario()
+
+	term, err := r.Run(context.Background(), sc, "run-no-success")
+	if err == nil {
+		t.Fatal("expected failure: recovery with zero successful requests must not pass")
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED", term)
+	}
+	if !strings.Contains(err.Error(), "not proven") {
+		t.Fatalf("error=%q, want the successful-request reason", err.Error())
+	}
+	row, _ := j.GetRun("run-no-success")
+	if row.State != StFailed {
+		t.Fatalf("journal=%s, want FAILED", row.State)
 	}
 }
 

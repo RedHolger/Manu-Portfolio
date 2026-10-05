@@ -98,6 +98,27 @@ func TestCoverageEmptyFails(t *testing.T) {
 	}
 }
 
+// Regression: a real 30s scrape gap straddling the 15s grid leaves a
+// SINGLE empty bucket, which the old worst*step accounting recorded as
+// 15s and passed. The distance between the surrounding present buckets
+// is (1+1)*15s = 30s > 20s, so coverage must fail.
+func TestCoverageSingleMissingBucketFails(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	holes := map[int64]bool{start.Add(150 * time.Second).Unix(): true}
+	s := matrixServer(t, start, holes)
+	defer s.Close()
+	cfg := mustConfig(t)
+	err := CheckCoverage(context.Background(), telemetry.New(s.URL),
+		cfg, "stable", start, start.Add(300*time.Second))
+	if err == nil {
+		t.Fatal("single empty 15s bucket (30s inter-sample gap) must fail coverage")
+	}
+	if !strings.Contains(err.Error(), "between source samples") {
+		t.Fatalf("expected the inter-sample gap error, got: %v", err)
+	}
+	t.Logf("correctly rejected: %v", err)
+}
+
 // B regression: real source samples spaced 60s apart must NOT pass. The
 // old gate read query_range evaluation points, and Prometheus replays the
 // last value across a scrape gap, so 60s spacing looked like a full 15s

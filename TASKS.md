@@ -699,8 +699,11 @@ Status reflects executed tests and measured outcomes only.
   `TestScheduleAndDrainReportSeparately`,
   `TestBoundedDrainCancelsAndInvalidates`.
 - **B DONE (coverage)**: real source samples per 15s bucket
-  (`count_over_time`, 2 series/slot); telemetry errors keep the window;
-  tests `TestCoverageSixtySecondScrapeSpacingFails`,
+  (`count_over_time`, 2 series/slot); gap measured between consecutive
+  present buckets ((worst+1)*step, so one empty bucket = 30s > 20s limit);
+  telemetry errors keep the window;
+  tests `TestCoverageSingleMissingBucketFails`,
+  `TestCoverageSixtySecondScrapeSpacingFails`,
   `TestFetchCountsSparseTelemetryInconclusive`,
   `TestEvaluateTelemetryErrorKeepsWindow`.
 - **C DONE (fixtures)**: `internal/budgetguard/fixture.go` validates
@@ -709,9 +712,12 @@ Status reflects executed tests and measured outcomes only.
   `TestReplayPreservesFractionalCounts`,
   `TestReplayIntegerFixturesUnestimated`.
 - **D DONE (cleanup ≠ recovery)**: post-cleanup recovery phase gated on
-  `MinRecoverySamples` (3) + failure ratio ≤ AbortMax + deadline;
+  `MinRecoverySamples` (3) attempts + `MaxRecoveryFailureRatio` (5%,
+  independent of `AbortMax`) + ≥3 successful (2xx) requests + deadline;
   `cleanup-ok` and `recovery-health`/`recovery-failed`/`recovery-skipped`
   journaled separately; tests `TestRecoveryUnhealthyFailsRun`,
+  `TestRecoveryAllFailWithPermissiveAbortFails`,
+  `TestRecoveryWithoutSuccessesFails`,
   `TestAbortRecordsRecoverySkipped`.
 - **E DONE (validity + persistence)**: every phase persists a
   `PhaseResult` (`phase-load` event + `phases.json`); invalid workloads

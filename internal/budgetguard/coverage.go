@@ -11,8 +11,16 @@
 // Both required series (the request counter used for eligible/bad counts
 // and the duration bucket used for slow-or-bad) must show:
 //   - ≤10% of buckets without a source sample,
-//   - no run of empty buckets longer than 20s,
+//   - no gap between consecutive source samples longer than 20s,
 //   - the first and last bucket of the window populated (edges).
+//
+// The gap is measured between consecutive PRESENT buckets, not as
+// empty-bucket time: a real 30s scrape gap straddling the 15s grid leaves
+// a single empty bucket, so worst*step would record 15s and pass a 30s
+// hole. The distance between the surrounding present buckets is
+// (worst+1)*step = 30s, which correctly fails the 20s limit. (The lab
+// scrapes every 5s, so a healthy window never has an empty 15s bucket;
+// any interior hole already implies missed scrapes.)
 //
 // Any violation ⇒ error ⇒ INCONCLUSIVE (never PASS).
 package budgetguard
@@ -110,9 +118,17 @@ func CheckCoverage(ctx context.Context, cl *telemetry.Client, cfg ServiceSLO, sl
 			return fmt.Errorf("slot %s: %d/%d buckets without source samples (>%.0f%%)",
 				slot, missing, expected, coverageMaxMissing*100)
 		}
-		if gap := time.Duration(worst) * coverageStep; gap > coverageMaxGap {
-			return fmt.Errorf("slot %s: %.0fs without source samples (>%.0fs)",
-				slot, gap.Seconds(), coverageMaxGap.Seconds())
+		// Gap between consecutive source samples: the present buckets on
+		// either side of a run of `worst` empty buckets are (worst+1)*step
+		// apart, and each proves a real scrape in its window, so the true
+		// inter-sample gap is bounded by that distance. Counting only
+		// empty-bucket time (worst*step) underestimates by one step: a 30s
+		// scrape gap straddling the grid shows a single empty bucket.
+		if worst > 0 {
+			if gap := time.Duration(worst+1) * coverageStep; gap > coverageMaxGap {
+				return fmt.Errorf("slot %s: %.0fs between source samples (>%.0fs)",
+					slot, gap.Seconds(), coverageMaxGap.Seconds())
+			}
 		}
 		// Edges: the buckets touching the window boundaries must hold real
 		// samples — else the window is not fully observed.

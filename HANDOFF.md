@@ -21,8 +21,11 @@ fixes.
   `TestScheduleAndDrainReportSeparately`,
   `TestBoundedDrainCancelsAndInvalidates`.
 - **B (coverage gate counts real samples)** — `internal/budgetguard/coverage.go`
-  (`count_over_time` per 15s bucket; 2 series per slot), `evaluate.go`
-  (window kept on telemetry error). Tests: `TestCoverageSixtySecondScrapeSpacingFails`,
+  (`count_over_time` per 15s bucket; 2 series per slot; gap measured between
+  consecutive present buckets so a single empty bucket fails the 20s limit),
+  `evaluate.go` (window kept on telemetry error). Tests:
+  `TestCoverageSingleMissingBucketFails`,
+  `TestCoverageSixtySecondScrapeSpacingFails`,
   `TestFetchCountsSparseTelemetryInconclusive`,
   `TestEvaluateTelemetryErrorKeepsWindow`.
 - **C (fixture validation)** — `internal/budgetguard/fixture.go` +
@@ -31,11 +34,14 @@ fixes.
   `TestReplayPreservesFractionalCounts`,
   `TestReplayIntegerFixturesUnestimated`.
 - **D (cleanup ≠ recovery)** — `internal/faultlab/runner.go`: post-cleanup
-  recovery phase with `MinRecoverySamples` (3) and failure-ratio gate vs
-  `AbortMax`, recovery deadline, `cleanup-ok` + `recovery-health` /
-  `recovery-failed` / `recovery-skipped` journal events (cleanup status is
-  recorded even when recovery is skipped). Tests:
-  `TestRecoveryUnhealthyFailsRun`, `TestAbortRecordsRecoverySkipped`.
+  recovery phase with `MinRecoverySamples` (3) attempts, independent
+   `MaxRecoveryFailureRatio` (5%, never `AbortMax`) and ≥3 successful (2xx)
+   requests, recovery deadline, `cleanup-ok` + `recovery-health` /
+   `recovery-failed` / `recovery-skipped` journal events (cleanup status is
+   recorded even when recovery is skipped). Tests:
+   `TestRecoveryUnhealthyFailsRun`,
+   `TestRecoveryAllFailWithPermissiveAbortFails`,
+   `TestRecoveryWithoutSuccessesFails`, `TestAbortRecordsRecoverySkipped`.
 - **E (workload validity + persistence errors)** — every phase persists a
   `PhaseResult` (journal `phase-load` + `OutDir/phases.json`); invalid or
   truncated workloads fail the run; declared assertions without a ledger

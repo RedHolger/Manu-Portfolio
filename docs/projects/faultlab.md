@@ -56,9 +56,12 @@ baseline → fault → recovery phases, abort policy, and an optional
 
 - **Recovery health gate.** After cleanup the runner executes the configured
   recovery phase and requires at least `MinRecoverySamples` (3) post-cleanup
-  requests with a failure ratio no worse than the scenario's abort threshold
-  (`5xx`, timeouts, transport errors and no-response count as failures), all
-  within `recoveryDeadlineSeconds` (which must strictly exceed
+  requests with a failure ratio within `MaxRecoveryFailureRatio` (5% — an
+  independent recovery budget, never the scenario's abort threshold, so a
+  permissive `maxFailureRatio: 1.0` cannot let a failed recovery pass) and
+  at least `MinRecoverySamples` successful (2xx) requests (`5xx`, timeouts,
+  transport errors and no-response count as failures), all within
+  `recoveryDeadlineSeconds` (which must strictly exceed
   `recoverySeconds`).
 - **Every phase is evidence.** Each workload phase persists a `PhaseResult`
   (journal event `phase-load` and `OutDir/phases.json`): planned/offered/

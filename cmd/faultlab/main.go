@@ -120,7 +120,7 @@ fault:      %s delay=%dms fraction=%.2f ttl=%ds
 abort:      >%.0f%% failures over %dx%ds windows → cleanup + mark
 cleanup:     DELETE /admin/faults/%s-* (idempotent) + verify zero active;
             TTL expiry is gateway-enforced and independent of this runner
-recovery:    recoverySeconds load after cleanup; <%.0f%% failures over >=%d requests, then PASSED
+recovery:    recoverySeconds load after cleanup; <=%.0f%% failures with >=%d successful (2xx) requests, then PASSED
 permissions: admin token on lab gateway only; no pod/node/cluster actions (F1/F2)
 `,
 		c.Name, sum,
@@ -129,7 +129,7 @@ permissions: admin token on lab gateway only; no pod/node/cluster actions (F1/F2
 		c.Baseline, c.FaultSecs, c.Recover,
 		c.FaultKind, c.DelayMs, c.Fraction, c.TTL,
 		c.AbortMax*100, c.AbortN, c.AbortWin, c.Name,
-		c.AbortMax*100, faultlab.MinRecoverySamples)
+		faultlab.MaxRecoveryFailureRatio*100, faultlab.MinRecoverySamples)
 	switch {
 	case !c.AssertsDeclared:
 		fmt.Println("oracle:      no spec.assertions.* declared (ledger not required)")

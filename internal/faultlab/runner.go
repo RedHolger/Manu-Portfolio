@@ -581,6 +581,16 @@ func (r *Runner) finishVerify(ctx context.Context, runID string, sc Scenario, re
 // anything about health: below it a zero failure ratio proves nothing.
 const MinRecoverySamples = 3
 
+// MaxRecoveryFailureRatio is the recovery phase's own health policy,
+// independent of the experiment abort threshold. Recovery previously reused
+// Scenario.AbortMax, so a permissive abort setting (e.g. AbortMax=1.0 for a
+// dependency-outage run that must not abort mid-fault) let a 100% failed
+// recovery phase pass: no failure ratio ever exceeds 1.0. Recovery must
+// prove the restored service serves successfully, so it carries a fixed
+// strict budget plus a successful-request floor (2xx responses, not merely
+// answered requests: an all-4xx recovery has ratio 0 but proves nothing).
+const MaxRecoveryFailureRatio = 0.05
+
 // recoveryHealth summarises post-cleanup requests. A 5xx, a timeout, a
 // transport failure, or a request with no response is a failure; 4xx are
 // counted only as answered (they prove the service is up, not healthy).
@@ -651,9 +661,13 @@ func (r *Runner) verifyRecovery(ctx context.Context, runID string, sc Scenario, 
 		return fail(fmt.Sprintf("recovery not measurable: %d post-cleanup requests, need >= %d",
 			h.Attempts, MinRecoverySamples))
 	}
-	if h.Ratio > sc.AbortMax {
-		return fail(fmt.Sprintf("service not healthy after cleanup: %.0f%% of %d post-cleanup requests failed (max %.0f%%)",
-			h.Ratio*100, h.Attempts, sc.AbortMax*100))
+	if h.Ratio > MaxRecoveryFailureRatio {
+		return fail(fmt.Sprintf("service not healthy after cleanup: %.0f%% of %d post-cleanup requests failed (recovery budget %.0f%%)",
+			h.Ratio*100, h.Attempts, MaxRecoveryFailureRatio*100))
+	}
+	if h.Success < MinRecoverySamples {
+		return fail(fmt.Sprintf("recovery not proven: %d successful post-cleanup requests, need >= %d",
+			h.Success, MinRecoverySamples))
 	}
 	if sc.RecoveryDeadline > 0 {
 		elapsed := time.Since(cleanupDone)
