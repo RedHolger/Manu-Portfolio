@@ -6,6 +6,15 @@ measured paired driver, sequential demo, image/setup/registration tools; loadgen
 key isolation/write errors and stricter context/disk guards. See
 `docs/CORRECTED_HANDOFF.md`. Live acceptance pending; no release tag.
 
+# Unreleased source fixes — 2026-10-05 (findings A–E)
+
+Loadgen absolute schedule + delivery contract and bounded drain; BudgetGuard
+source-sample coverage gate and replay-fixture validation; FaultLab
+post-cleanup recovery health gate, per-phase workload evidence, fail-closed
+`--pg-dsn` assertions, and propagated persistence errors. Unit-verified
+(`go test ./...`, `-race` on `internal/faultlab`); no live run yet, so these
+are IMPLEMENTED_UNVERIFIED against the lab.
+
 # CHANGELOG.md — delivered behavior and known limitations per release.
 
 Unreleased v1.0 work is described as pending with its gate; nothing below

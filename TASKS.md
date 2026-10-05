@@ -689,3 +689,46 @@ Status reflects executed tests and measured outcomes only.
 - Validation: `go test ./...` PASS; `git diff --check` PASS. The test run
   caught a real tuple/value parsing bug in `sumVector`; fixed in the
   working tree. No live redeploy or benchmark was run.
+
+## Session: publication kickoff — independent-evaluation findings A–E (2026-10-05)
+- Branch `recoverops-dev`, HEAD `3f11c8f`; `DEPLOYMENT_PLAN.md` written
+  (repo/hosting strategy, safety boundaries, gates G-0..G-6).
+- **A DONE (loadgen)**: absolute monotonic schedule with Planned/Offered/
+  Missed, bounded drain, 6-rule Valid contract, `OnAttempt`; tests
+  `TestStalledScheduleStopsAtAbsoluteDeadline`,
+  `TestScheduleAndDrainReportSeparately`,
+  `TestBoundedDrainCancelsAndInvalidates`.
+- **B DONE (coverage)**: real source samples per 15s bucket
+  (`count_over_time`, 2 series/slot); telemetry errors keep the window;
+  tests `TestCoverageSixtySecondScrapeSpacingFails`,
+  `TestFetchCountsSparseTelemetryInconclusive`,
+  `TestEvaluateTelemetryErrorKeepsWindow`.
+- **C DONE (fixtures)**: `internal/budgetguard/fixture.go` validates
+  presence/finiteness/relationships and preserves fractions; tests
+  `TestReplayRejectsMalformedFixtures`,
+  `TestReplayPreservesFractionalCounts`,
+  `TestReplayIntegerFixturesUnestimated`.
+- **D DONE (cleanup ≠ recovery)**: post-cleanup recovery phase gated on
+  `MinRecoverySamples` (3) + failure ratio ≤ AbortMax + deadline;
+  `cleanup-ok` and `recovery-health`/`recovery-failed`/`recovery-skipped`
+  journaled separately; tests `TestRecoveryUnhealthyFailsRun`,
+  `TestAbortRecordsRecoverySkipped`.
+- **E DONE (validity + persistence)**: every phase persists a
+  `PhaseResult` (`phase-load` event + `phases.json`); invalid workloads
+  fail the run; assertions without a ledger fail closed (`--pg-dsn`
+  wired into `faultlab run`, refused pre-journal); journal/file write
+  failures propagate; `Run` named results make the safety-net terminal
+  visible; tests `TestInvalidWorkloadNeverPasses`,
+  `TestEvidenceWriteFailureFailsRun`,
+  `TestPhasePersistJournalErrorPropagates`,
+  `TestAssertionsWithoutLedgerFailClosed`.
+- Config fixes: `configs/faults/{delay,reset}.yaml`
+  `duplicateReservations: 0 → false` (strict bool parsing);
+  `recoveryDeadlineSeconds` must now strictly exceed `recoverySeconds`;
+  `phaseSeedOffset("recovery") = 2000000` closes the tracked phase-key
+  reuse issue (`TestPhaseKeyNamespacesDisjoint` covers 3 phases/120 keys).
+- Validation: `gofmt`, `go build ./...`, `go vet ./...`,
+  `go test ./... -count=1` all green; `-race` on `internal/faultlab` green.
+  No live run (docker daemon down); no `results/` bundle produced.
+- Next: secret audit, `publish-demos` branch, static demo site (3 routes),
+  CI, deploy/verify, `PUBLIC_LINKS.md` + CV snippets.

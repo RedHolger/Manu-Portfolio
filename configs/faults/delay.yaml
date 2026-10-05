@@ -26,6 +26,6 @@ spec:
     consecutiveWindows: 2
     windowSeconds: 5
   assertions:
-    duplicateReservations: 0
+    duplicateReservations: false
     negativeInventory: false
     recoveryDeadlineSeconds: 120

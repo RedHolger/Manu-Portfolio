@@ -37,7 +37,7 @@ func TestCoverageFullWindowPasses(t *testing.T) {
 	defer s.Close()
 	cfg := mustConfig(t)
 	if err := CheckCoverage(context.Background(), telemetry.New(s.URL),
-		cfg.Service, "stable", start, start.Add(300*time.Second)); err != nil {
+		cfg, "stable", start, start.Add(300*time.Second)); err != nil {
 		t.Fatalf("full window: %v", err)
 	}
 }
@@ -61,7 +61,7 @@ func TestCoverageShortWindowFails(t *testing.T) {
 	defer s.Close()
 	cfg := mustConfig(t)
 	err := CheckCoverage(context.Background(), telemetry.New(s.URL),
-		cfg.Service, "stable", start, start.Add(300*time.Second))
+		cfg, "stable", start, start.Add(300*time.Second))
 	if err == nil {
 		t.Fatal("80s of traffic in a 300s window must fail coverage")
 	}
@@ -79,7 +79,7 @@ func TestCoverageGapFails(t *testing.T) {
 	defer s.Close()
 	cfg := mustConfig(t)
 	if err := CheckCoverage(context.Background(), telemetry.New(s.URL),
-		cfg.Service, "stable", start, start.Add(300*time.Second)); err == nil {
+		cfg, "stable", start, start.Add(300*time.Second)); err == nil {
 		t.Fatal("75s gap must fail coverage")
 	}
 }
@@ -93,7 +93,72 @@ func TestCoverageEmptyFails(t *testing.T) {
 	cfg := mustConfig(t)
 	start := time.Now().UTC()
 	if err := CheckCoverage(context.Background(), telemetry.New(s.URL),
-		cfg.Service, "stable", start, start.Add(300*time.Second)); err == nil {
+		cfg, "stable", start, start.Add(300*time.Second)); err == nil {
 		t.Fatal("empty window must fail coverage")
 	}
+}
+
+// B regression: real source samples spaced 60s apart must NOT pass. The
+// old gate read query_range evaluation points, and Prometheus replays the
+// last value across a scrape gap, so 60s spacing looked like a full 15s
+// grid. count_over_time sees the raw samples: 5 of 20 buckets covered.
+func TestCoverageSixtySecondScrapeSpacingFails(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var vals []string
+		// Raw samples every 60s, on the 15s evaluation grid.
+		for ts := start.Add(60 * time.Second).Unix(); ts <= start.Add(300*time.Second).Unix(); ts += 60 {
+			vals = append(vals, fmt.Sprintf("[%d,\"3\"]", ts))
+		}
+		_, _ = w.Write([]byte(
+			`{"status":"success","data":{"resultType":"matrix","result":[` +
+				`{"metric":{},"values":[` + strings.Join(vals, ",") + `]}]}}`))
+	}))
+	defer s.Close()
+	cfg := mustConfig(t)
+	err := CheckCoverage(context.Background(), telemetry.New(s.URL),
+		cfg, "stable", start, start.Add(300*time.Second))
+	if err == nil {
+		t.Fatal("60s scrape spacing in a 300s window must fail coverage")
+	}
+	t.Logf("correctly rejected: %v", err)
+}
+
+// B regression: the same reproduction through FetchCounts — the caller maps
+// this error to INCONCLUSIVE (exit 3), never PASS.
+func TestFetchCountsSparseTelemetryInconclusive(t *testing.T) {
+	start := time.Now().UTC()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("query")
+		if strings.Contains(r.URL.Path, "query_range") {
+			var vals []string
+			for ts := start.Add(60 * time.Second).Unix(); ts <= start.Add(300*time.Second).Unix(); ts += 60 {
+				vals = append(vals, fmt.Sprintf("[%d,\"3\"]", ts))
+			}
+			_, _ = w.Write([]byte(
+				`{"status":"success","data":{"resultType":"matrix","result":[` +
+					`{"metric":{},"values":[` + strings.Join(vals, ",") + `]}]}}`))
+			return
+		}
+		if strings.Contains(q, "timestamp(") {
+			_, _ = w.Write([]byte(
+				`{"status":"success","data":{"resultType":"vector","result":[` +
+					`{"metric":{"service":"reservations"},"value":[` +
+					fmt.Sprintf("%d", start.Add(300*time.Second).Unix()) + `,"5"]}]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(
+			`{"status":"success","data":{"resultType":"vector","result":[` +
+				`{"metric":{},"value":[` + fmt.Sprintf("%d", start.Unix()) + `,"100"]}]}}`))
+	}))
+	defer s.Close()
+	cfg := mustConfig(t)
+	_, err := FetchCounts(context.Background(), telemetry.New(s.URL), cfg, start.Add(300*time.Second))
+	if err == nil {
+		t.Fatal("sparse telemetry must not yield counts (INCONCLUSIVE)")
+	}
+	if !strings.Contains(err.Error(), "coverage") {
+		t.Fatalf("expected a coverage error, got: %v", err)
+	}
+	t.Logf("correctly inconclusive: %v", err)
 }

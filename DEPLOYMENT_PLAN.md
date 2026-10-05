@@ -1,0 +1,90 @@
+# DEPLOYMENT_PLAN.md — publish source + three public demos
+
+Created 2026-10-05. Live alongside RELEASE_PLAN.md (release contract is
+unchanged; this plan covers publication and demos only).
+
+## Baseline
+
+- Branch `recoverops-dev`, HEAD `3f11c8f406a8940f17b57ef63bf64dc0ceae9cc6`.
+- Preserved baselines `0fe8b77` (master) and `cad2f7e` (correctness-fixes).
+- Working tree at plan time: only untracked `results/**` evidence plus a
+  stale empty `results/.recoverops-experiment.lock`. No experiment driver
+  or benchmark process was running (verified with `ps`).
+- Disk: 92 GiB free on the repo volume. Docker daemon down; kind cluster
+  `kind-sre-lab` context exists but is not verified live.
+
+## Repository strategy
+
+- ONE canonical repository: the existing local repository, pushed whole
+  (source + docs + a small sanitised evidence set) under the
+  authenticated GitHub account `RedHolger`.
+- SSH to GitHub already authenticates (`ssh -T git@github.com` →
+  `Hi RedHolger!`). `git ls-remote` shows no existing suitable repository
+  under that account for the probed names (`sre-portfolio`,
+  `SRE-Portfolio`, `portfolio`, `sre-portfolio-public`).
+- BLOCKER: no valid GitHub REST credential. The keychain OAuth token
+  (`gho_…`, 40 chars, account `141308323`) returns `401 Bad credentials`;
+  `gh` CLI is not installed and has no login; no `GITHUB_TOKEN`/`GH_TOKEN`
+  in the environment or shell profiles. Creating a repository, enabling
+  Pages, and configuring Actions secrets all require API or web auth.
+- Publication branch: `publish-demos`, cut from `3f11c8f`. No branch of
+  that name exists. Never force-push, never rewrite history, never push
+  `results/` bulk evidence or `bin/` build output.
+- Excluded from publication: `*.env`, `bin/`, `*-bin`, `*.log`,
+  `__pycache__/`, `._*`, `results/**` except a curated
+  `docs/evidence/public/` sample set selected later.
+
+## Hosting strategy
+
+- Static demo site, one deployment, three routes:
+  `/budgetguard/`, `/faultlab/`, `/recoverops/`.
+- Hosting: **Vercel** — CLI `v47.0.1` is already authenticated as
+  `manuvashisth` in team `manus-projects-ffd06e65` (existing projects
+  `notes`, `manu-masters-portfolio`; static hobby-tier deployments, no
+  charges, no payment entry). GitHub Pages is the fallback once a GitHub
+  credential exists (Pages must be enabled via API/web otherwise).
+- Deployment runs from repository CI (`.github/workflows/`) once a GitHub
+  credential exists; until then a local `vercel deploy --prod` from the
+  `publish-demos` branch is the bounded path and is recorded as
+  `deployed locally, CI pending`.
+
+## Public-demo safety boundaries
+
+- No public Kubernetes control plane, no fault-injection admin endpoint,
+  no execute/patch/rollback/webhook action reachable by anonymous users.
+- BudgetGuard demo: precomputed decision documents produced by the
+  canonical Go CLI (`budgetguard replay`/`evaluate`), served as static
+  JSON; any browser-side re-evaluation is contract-tested against the Go
+  output and labelled.
+- FaultLab demo: sanitised journal events / explicitly labelled
+  simulation, read-only.
+- RecoverOps demo: read-only state machine over sanitised ingestion
+  evidence; fixture-driven rows are labelled separately from measured
+  runtime evidence.
+- Public assets must contain no tokens, kubeconfigs, DSNs, internal
+  cluster addresses or privileged endpoint URLs.
+
+## Acceptance gates
+
+| Gate | Requirement |
+|---|---|
+| G-0 findings | Findings A–E either fixed with regression tests that run green, or documented as unresolved with reasons (no false completion) |
+| G-1 hygiene | Secret scan of tracked files + history before first push; no credentials in tree or history |
+| G-2 pages | `docs/projects/{budgetguard,faultlab,recoverops}.md` + rewritten root README exist and match reality |
+| G-3 build | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l`, `make test-rules`, `make test-scripts` green locally |
+| G-4 deploy | Site deployed to a real, no-charge URL; three routes load without auth |
+| G-5 verify | Each URL opened, refreshed, exercised, console/network checked, screenshots captured, build commit displayed matches deployed commit |
+| G-6 outputs | `PUBLIC_LINKS.md` + three LaTeX CV snippets using only verified URLs |
+
+## Current blockers
+
+1. GitHub repository creation / Pages / Actions — needs a credential
+   (exact actions listed in the final report). Demos and docs can be
+   completed and locally verified without it; source links stay absent
+   until the repository exists.
+
+## Exact next command
+
+```sh
+git switch -c publish-demos        # from 3f11c8f, after the findings work
+```

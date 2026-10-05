@@ -94,7 +94,7 @@ func FetchCounts(ctx context.Context, cl *telemetry.Client, cfg ServiceSLO, end 
 	// Full-window coverage (H1): an 80s run must not report a 300s window.
 	// Both slots checked before any counts are read.
 	for _, slot := range []string{"stable", "candidate"} {
-		if err := CheckCoverage(ctx, cl, svc, slot, start, end); err != nil {
+		if err := CheckCoverage(ctx, cl, cfg, slot, start, end); err != nil {
 			return out, fmt.Errorf("coverage: %w", err)
 		}
 	}
@@ -169,14 +169,19 @@ func scalarSum(ctx context.Context, cl *telemetry.Client, expr string, at time.T
 }
 
 // ReplayFixture evaluates a recorded fixture (offline path — no Prometheus).
-// Fixture schema: {"stable": {...SlotCounts}, "candidate": {...SlotCounts}}.
+// Fixture schema: {"stable": {eligible,bad,slow_or_bad},
+// "candidate": {eligible,bad,slow_or_bad}}. The fixture is VALIDATED first
+// (required fields, finite values, 0 <= bad <= slow_or_bad <= eligible) so a
+// malformed or missing count is an explicit error, never a silent zero that
+// decides PASS. Fractional counts gate on their raw value (H6); the JSON
+// report shows rounded integers flagged with estimated_counts.
 func ReplayFixture(cfg ServiceSLO, end time.Time, raw []byte) (Result, error) {
-	var fx struct {
-		Stable    SlotCounts `json:"stable"`
-		Candidate SlotCounts `json:"candidate"`
-	}
-	if err := json.Unmarshal(raw, &fx); err != nil {
+	stable, cand, err := ParseFixture(raw)
+	if err != nil {
 		return Result{}, err
 	}
-	return Decide(cfg, end, fx.Stable, fx.Candidate), nil
+	return DecideCounts(cfg, end,
+		stable.counts(), cand.counts(),
+		stable.display(), cand.display(),
+		stable.fractional() || cand.fractional()), nil
 }

@@ -46,6 +46,19 @@ type Scenario struct {
 	AbortMax  float64
 	AbortN    int64
 	AbortWin  int64 // seconds
+	// Declared correctness assertions (optional keys). Any declared
+	// assertion makes the runner integrate the F4 oracle over the run's
+	// client-observed operations and its committed ledger; an assertion
+	// declared without a configured ledger fails the run closed.
+	// spec.assertions.* — an assertions block opts the run into the
+	// correctness oracle. The two flags record which invariants the author
+	// named; the oracle itself enforces the full invariant suite (never
+	// weaker than declared) and fails closed without a ledger.
+	AssertDuplicates   bool // spec.assertions.duplicateReservations
+	AssertNegativeInv  bool // spec.assertions.negativeInventory
+	AssertsDeclared    bool // any spec.assertions.* key present
+	RecoveryDeadline   int64
+	RecoveryDeadlineOK bool
 }
 
 var faultKeys = map[string]bool{
@@ -106,6 +119,39 @@ func ParseScenario(raw string) (Scenario, error) {
 		}
 		*dst = f
 	}
+	// Optional integer: absent leaves the zero value, present must parse.
+	intOpt := func(key string, dst *int64, min int64) {
+		v, ok := flat[key]
+		if !ok {
+			return
+		}
+		if firstErr != nil {
+			return
+		}
+		n, e := strconv.ParseInt(v, 10, 64)
+		if e != nil || n < min {
+			firstErr = fmt.Errorf("field %q must be integer >= %d: %q", key, min, v)
+			return
+		}
+		*dst = n
+	}
+	boolOpt := func(key string, dst *bool) {
+		v, ok := flat[key]
+		if !ok {
+			return
+		}
+		if firstErr != nil {
+			return
+		}
+		switch strings.ToLower(v) {
+		case "true":
+			*dst = true
+		case "false":
+			*dst = false
+		default:
+			firstErr = fmt.Errorf("field %q must be true|false: %q", key, v)
+		}
+	}
 	intf := func(key string, dst *int64, min int64) {
 		if firstErr != nil {
 			return
@@ -121,6 +167,21 @@ func ParseScenario(raw string) (Scenario, error) {
 			return
 		}
 		*dst = n
+	}
+	boolOpt("spec.assertions.duplicateReservations", &c.AssertDuplicates)
+	boolOpt("spec.assertions.negativeInventory", &c.AssertNegativeInv)
+	intOpt("spec.assertions.recoveryDeadlineSeconds", &c.RecoveryDeadline, 0)
+	for _, k := range []string{
+		"spec.assertions.duplicateReservations",
+		"spec.assertions.negativeInventory",
+		"spec.assertions.recoveryDeadlineSeconds",
+	} {
+		if _, ok := flat[k]; ok {
+			c.AssertsDeclared = true
+		}
+	}
+	if c.RecoveryDeadline > 0 {
+		c.RecoveryDeadlineOK = true
 	}
 	if v := str("metadata.name"); v != "" {
 		c.Name = v
@@ -180,6 +241,15 @@ func ParseScenario(raw string) (Scenario, error) {
 	}
 	if c.Rate <= 0 {
 		return c, fmt.Errorf("workload.rate must be positive")
+	}
+	// The declared recovery deadline bounds the whole post-cleanup phase,
+	// which runs for recoverySeconds: a deadline the phase cannot meet is
+	// a configuration error, not a future FAILED run.
+	// The deadline must leave room above the phase it bounds (scheduling
+	// and bounded drain), otherwise every compliant run fails on overhead.
+	if c.RecoveryDeadline > 0 && c.RecoveryDeadline <= c.Recover {
+		return c, fmt.Errorf("recoveryDeadlineSeconds %d must exceed recoverySeconds %d",
+			c.RecoveryDeadline, c.Recover)
 	}
 	return c, nil
 }

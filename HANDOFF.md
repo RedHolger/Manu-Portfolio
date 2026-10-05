@@ -1,3 +1,84 @@
+# HANDOFF — current checkpoint (publication session started 2026-10-05)
+
+> Read `DEPLOYMENT_PLAN.md` for the repository/hosting/gate plan of this
+> session. Last verified: findings A–E closed, full Go suite green.
+
+## Status 2026-10-05 — independent-evaluation findings A–E closed (code+tests)
+
+Verified in this session: `gofmt -l cmd internal` clean, `go build ./...`,
+`go vet ./...`, `go test ./... -count=1` (all packages ok), and
+`go test ./internal/faultlab/ -race` ok. No live cluster run was performed
+(docker daemon not running); no `results/` bundle was produced by these
+fixes.
+
+- **A (loadgen schedule)** — `internal/loadgen/loadgen.go`: absolute
+  monotonic schedule ending at `start+Duration`, `Planned/Offered/Missed`
+  accounting, `ScheduleSeconds`/`DrainSeconds`/`ElapsedSeconds`,
+  `OfferedRPS` vs `AchievedRPS`, bounded drain (`DrainTimeout`, default
+  4×timeout clamped [5s,60s]) with `Cancel`/`DrainTimedOut`, 6-rule Valid
+  contract, `hookSlot` test hook, `OnAttempt` callback. Tests:
+  `TestStalledScheduleStopsAtAbsoluteDeadline`,
+  `TestScheduleAndDrainReportSeparately`,
+  `TestBoundedDrainCancelsAndInvalidates`.
+- **B (coverage gate counts real samples)** — `internal/budgetguard/coverage.go`
+  (`count_over_time` per 15s bucket; 2 series per slot), `evaluate.go`
+  (window kept on telemetry error). Tests: `TestCoverageSixtySecondScrapeSpacingFails`,
+  `TestFetchCountsSparseTelemetryInconclusive`,
+  `TestEvaluateTelemetryErrorKeepsWindow`.
+- **C (fixture validation)** — `internal/budgetguard/fixture.go` +
+  `ReplayFixture` rewrite (presence/finite/relationship checks, fractional
+  preservation). Tests: `TestReplayRejectsMalformedFixtures`,
+  `TestReplayPreservesFractionalCounts`,
+  `TestReplayIntegerFixturesUnestimated`.
+- **D (cleanup ≠ recovery)** — `internal/faultlab/runner.go`: post-cleanup
+  recovery phase with `MinRecoverySamples` (3) and failure-ratio gate vs
+  `AbortMax`, recovery deadline, `cleanup-ok` + `recovery-health` /
+  `recovery-failed` / `recovery-skipped` journal events (cleanup status is
+  recorded even when recovery is skipped). Tests:
+  `TestRecoveryUnhealthyFailsRun`, `TestAbortRecordsRecoverySkipped`.
+- **E (workload validity + persistence errors)** — every phase persists a
+  `PhaseResult` (journal `phase-load` + `OutDir/phases.json`); invalid or
+  truncated workloads fail the run; declared assertions without a ledger
+  fail closed; persistence failures propagate (including `markCleanupFailed`
+  journal errors); `Run` now has named results so the safety-net cleanup
+  reports its terminal state. Tests: `TestInvalidWorkloadNeverPasses`,
+  `TestEvidenceWriteFailureFailsRun`,
+  `TestPhasePersistJournalErrorPropagates`,
+  `TestAssertionsWithoutLedgerFailClosed`.
+
+Decisions worth remembering (see code comments):
+- `spec.assertions.*` present ⇒ oracle runs the full invariant suite and
+  needs `--pg-dsn` (CLI refuses before any journal row); `faultlab plan`
+  prints the oracle line.
+- Assertion booleans are parsed strictly (`true|false`); `configs/faults/
+  {delay,reset}.yaml` used `duplicateReservations: 0` and were corrected to
+  `false` — historical `results/` bundles are left untouched.
+- `recoveryDeadlineSeconds` must strictly exceed `recoverySeconds` (room
+  for scheduling and bounded drain).
+- Phase key namespaces are disjoint for all three phases
+  (`phaseSeedOffset`: baseline 0, fault 1000000, recovery 2000000);
+  `TestPhaseKeyNamespacesDisjoint` now covers 3 phases / 120 keys.
+- Attempts are recorded for every phase (oracle + recovery health).
+
+## Session plan and blockers
+- Work order: findings A–E (done) → secret audit → `publish-demos` branch
+  → project pages + README → static demo site (3 routes) → CI → deploy and
+  verify → `PUBLIC_LINKS.md` + CV snippets → checkpoint.
+- GitHub: SSH works as `RedHolger`; REST blocked (keychain `gho_…` token →
+  401; `gh` not installed; that token was leaked into a transcript earlier
+  — never re-echo it). Repo creation is being done **by the owner in the
+  browser**; verify with
+  `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=8" git ls-remote origin HEAD`
+  before using any URL. `origin` = `git@github.com:RedHolger/sre-portfolio.git`.
+- Vercel CLI authenticated as `manuvashisth` (team
+  `manus-projects-ffd06e65`, hobby static, no charge) → demo hosting.
+- Untracked `results/` bundles from earlier sessions
+  (`results/budgetguard/demo-20261004T*`, `results/faultlab/compare-*`,
+  `results/recoverops/pairs/pair-0{2,3}`) are NOT committed by the A–E
+  checkpoint — owner/reviewer decides; never delete them.
+- Old content below describes the pre-session state and is retained
+  verbatim for provenance.
+
 # HANDOFF — current checkpoint (RecoverOps R4 implemented-unverified)
 
 > RECONCILED 2026-10-04 against actual Git state. Branch is

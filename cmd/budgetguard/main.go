@@ -168,8 +168,16 @@ func evaluate(args []string) (int, error) {
 	defer cancel()
 	f, err := budgetguard.FetchCounts(ctx, cl, cfg, end)
 	if err != nil {
+		// The decision window still applies on a telemetry error: the
+		// evidence names the window that could not be observed (B).
+		obsEnd := end.UTC()
+		obsStart := obsEnd.Add(-time.Duration(cfg.Gate.ObservationSeconds) * time.Second)
 		res := budgetguard.Result{SchemaVersion: 1, Decision: "INCONCLUSIVE",
-			Reasons:         []string{"telemetry_error:" + err.Error()},
+			Reasons: []string{"telemetry_error:" + err.Error()},
+			Window: budgetguard.Window{
+				Start: obsStart.Format(time.RFC3339),
+				End:   obsEnd.Format(time.RFC3339),
+			},
 			HistoryComplete: false, PolicyHash: budgetguard.ConfigHash(cfg)}
 		if werr := writeResult(out, res); werr != nil {
 			return 1, werr

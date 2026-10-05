@@ -25,9 +25,16 @@ import (
 )
 
 // Attempt is one JSONL line: a single HTTP try of a logical operation.
+// Key/SKU/Qty are the synthetic request identity (load-<seed>-<n>, never
+// customer data): the correctness oracle matches client-observed operations
+// against the committed ledger by idempotency key, so the raw key travels
+// with the attempt. Older histories simply omit them (omitempty).
 type Attempt struct {
 	OpID      string    `json:"op_id"`
 	AttemptID int       `json:"attempt"`
+	Key       string    `json:"key,omitempty"`
+	SKU       string    `json:"sku,omitempty"`
+	Qty       int64     `json:"qty,omitempty"`
 	KeyHash   string    `json:"key_hash"`
 	PlannedAt time.Time `json:"planned_at"`
 	StartAt   time.Time `json:"start_at"`
@@ -39,21 +46,49 @@ type Attempt struct {
 	ResvID    string    `json:"reservation_id,omitempty"`
 }
 
-// Summary aggregates offered/launched/completed/dropped/outstanding.
+// Summary aggregates planned/offered/launched/completed/dropped/missed/
+// outstanding plus the two phases of the run (schedule, then drain).
+//
+// Delivery contract — a workload is Valid only if ALL of these hold:
+//  1. every planned slot is accounted for:
+//     Planned == Offered + Missed == Launched + Dropped + Missed;
+//  2. the schedule finished at or before the absolute deadline
+//     (start + Duration): Missed == 0, i.e. Truncated == false;
+//  3. drop rate (Dropped/Offered) ≤ 1%;
+//  4. offered rate over the SCHEDULE window ≥ 90% of the nominal rate;
+//  5. draining of already-launched work finished inside the bounded drain
+//     window (Config.DrainTimeout, default 4×Timeout clamped to [5s,60s]);
+//  6. the attempt history was written successfully.
+//
+// Scheduling duration and bounded draining are reported separately:
+// ScheduleSeconds never absorbs drain time, and draining is never
+// unbounded. Completed/Elapsed is reported for information only.
 type Summary struct {
-	Offered, Launched, Completed, Dropped, Outstanding int
-	SchedLagP50Ms, SchedLagP99Ms                       float64
-	AchievedRPS                                        float64
-	LatP50Ms, LatP95Ms, LatP99Ms                       float64
-	TransportErrors                                    int
-	Successful                                         int    // 2xx completions (smoke gate)
-	Valid                                              bool   // false if drop>1% or saturation
-	InvalidReason                                      string `json:",omitempty"`
-	// Truncated reports that the deadline ended the schedule before all n
-	// planned ticks fired. Without this bound, dropped launches were
-	// retried on later ticks and a configured duration silently extended
-	// under overload (H5). Invariant: Offered == Launched + Dropped.
+	// Planned is rate × duration — the slots the schedule promised.
+	// Offered is what the scheduler attempted (Launched + Dropped).
+	// Missed is planned slots never attempted because the absolute
+	// deadline or a cancellation stopped the schedule.
+	Planned, Offered, Launched, Completed, Dropped, Missed, Outstanding int
+	// Cancelled is work abandoned when bounded draining hit DrainTimeout.
+	Cancelled                    int
+	SchedLagP50Ms, SchedLagP99Ms float64
+	// OfferedRPS is delivery over the schedule window (the number that
+	// must reach 90% of nominal). AchievedRPS is completions over the
+	// whole run INCLUDING bounded drain — never a substitute for it.
+	OfferedRPS, AchievedRPS                       float64
+	ScheduleSeconds, DrainSeconds, ElapsedSeconds float64
+	LatP50Ms, LatP95Ms, LatP99Ms                  float64
+	TransportErrors                               int
+	Successful                                    int    // 2xx completions (smoke gate)
+	Valid                                         bool   // false if any delivery rule fails
+	InvalidReason                                 string `json:",omitempty"`
+	// Truncated reports that the schedule stopped before every planned
+	// slot was attempted (deadline overrun or cancellation). Invariant:
+	// Truncated == (Missed > 0).
 	Truncated bool
+	// DrainTimedOut reports that bounded draining exceeded DrainTimeout
+	// and outstanding work was cancelled.
+	DrainTimedOut bool
 }
 
 // Config for a run.
@@ -72,6 +107,10 @@ type Config struct {
 	// InvalidFraction of ops use an unknown SKU (→ 400 client_error).
 	// Deterministic per (seed, n); excluded from SLIs, counted in load.
 	InvalidFraction float64
+	// DrainTimeout bounds draining after the schedule ends. Zero selects
+	// 4 × Timeout clamped to [5s, 60s]. Exceeding it cancels outstanding
+	// work and invalidates the run (never an unbounded wg.Wait).
+	DrainTimeout time.Duration
 }
 
 // Runner executes against a gateway base URL.
@@ -80,9 +119,62 @@ type Runner struct {
 	Client  *http.Client
 	Out     io.Writer // JSONL attempts
 	OnRetry func(opID string)
+	// OnAttempt is called for every completed attempt, while loadgen's
+	// internal lock is held. Callers must not call back into this package
+	// from it; it exists so phase runners can collect oracle operations
+	// without re-reading the JSONL history.
+	OnAttempt func(a Attempt)
+
+	// hookSlot runs before slot k is scheduled. Unexported and nil in
+	// production: it exists so a regression test can stall the scheduler
+	// and prove the absolute deadline (not a far stall guard) bounds the
+	// schedule. Callers outside this package cannot set it.
+	hookSlot func(k int)
+}
+
+// drainWindow bounds post-schedule draining (Config.DrainTimeout wins).
+func drainWindow(cfg Config) time.Duration {
+	if cfg.DrainTimeout > 0 {
+		return cfg.DrainTimeout
+	}
+	d := 4 * cfg.Timeout
+	if d < 5*time.Second {
+		d = 5 * time.Second
+	}
+	if d > 60*time.Second {
+		d = 60 * time.Second
+	}
+	return d
+}
+
+// waitTimeout returns true when wg finishes inside d.
+func waitTimeout(wg *sync.WaitGroup, d time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		return false
+	}
 }
 
 // Run executes the schedule; returns summary. Context cancels the run.
+//
+// The schedule is absolute: slot k is due at start + k×interval, where
+// start is the monotonic time at entry and interval is 1/rate. Slots are
+// dispatched in order, late slots are dispatched immediately with their
+// ORIGINAL planned time (lag is measured against it), and no slot is ever
+// attempted at or after the deadline start+Duration — the remainder is
+// recorded as Missed. A time.Ticker cannot be used here: under load the
+// runtime drops ticks, the loop then keeps firing until the tick COUNT is
+// reached, and a configured 20s run silently stretched to 30s+ while still
+// reporting Valid=true.
 func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 	if math.IsNaN(cfg.Rate) || math.IsInf(cfg.Rate, 0) || cfg.Rate <= 0 || cfg.Rate > 1e6 || cfg.Duration <= 0 || cfg.Timeout <= 0 || math.IsNaN(cfg.InvalidFraction) || cfg.InvalidFraction < 0 || cfg.InvalidFraction > 1 {
 		return Summary{}, fmt.Errorf("invalid load configuration")
@@ -90,15 +182,20 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 	if cfg.Workers <= 0 {
 		cfg.Workers = 32
 	}
-	interval := time.Duration(float64(time.Second) / cfg.Rate)
 	n := int(cfg.Rate * cfg.Duration.Seconds())
+	interval := time.Duration(float64(time.Second) / cfg.Rate)
 	jobs := make(chan job, cfg.Workers*2)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var attempts []Attempt
 	var writeErr error
-	var launched, completed, dropped, transportErrs, successful int
+	var offered, launched, completed, dropped, transportErrs, successful int
 	var lags, lats []float64
+
+	// Workers run on a derived context so bounded draining can cancel
+	// outstanding work instead of waiting unboundedly for it.
+	rctx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
 
 	for w := 0; w < cfg.Workers; w++ {
 		wg.Add(1)
@@ -110,7 +207,7 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 				launched++
 				lags = append(lags, float64(lag.Microseconds())/1000.0)
 				mu.Unlock()
-				att := rn.once(ctx, cfg, j)
+				att := rn.once(rctx, cfg, j)
 				mu.Lock()
 				completed++
 				lats = append(lats, att.LatencyMs)
@@ -121,6 +218,9 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 					successful++
 				}
 				attempts = append(attempts, att)
+				if rn.OnAttempt != nil {
+					rn.OnAttempt(att)
+				}
 				mu.Unlock()
 				if rn.Out != nil {
 					raw, _ := json.Marshal(att)
@@ -133,49 +233,78 @@ func (rn *Runner) Run(ctx context.Context, cfg Config) (Summary, error) {
 			}
 		}()
 	}
-	start := time.Now()
-	// The schedule ends by COUNT (every fired tick counts, enqueued or
-	// dropped): drops are reported via Valid=false, never by stretching the
-	// run. The deadline is only a stall guard (suspended clock, wedged
-	// ticker) set far beyond any honest schedule.
-	deadline := start.Add(cfg.Duration + 30*time.Second)
-	ticked := 0
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
+
+	start := time.Now() // monotonic anchor for every planned slot
+	deadline := start.Add(cfg.Duration)
+	missed := 0
 Loop:
-	for ticked < n {
-		select {
-		case <-ctx.Done():
-			break Loop
-		case planned := <-tick.C:
-			if planned.After(deadline) {
-				break Loop
-			}
-			ticked++
-			opID := fmt.Sprintf("op-%d-%d", cfg.Seed, ticked)
-			if cfg.KeyPrefix != "" {
-				opID = cfg.KeyPrefix + "-" + opID
-			}
+	for k := 0; k < n; k++ {
+		if rn.hookSlot != nil {
+			rn.hookSlot(k)
+		}
+		planned := start.Add(time.Duration(k) * interval)
+		if d := time.Until(planned); d > 0 {
+			timer := time.NewTimer(d)
 			select {
-			case jobs <- job{opID: opID, n: ticked, planned: planned, seed: cfg.Seed}:
-			default:
-				mu.Lock()
-				dropped++
-				mu.Unlock()
+			case <-ctx.Done():
+				timer.Stop()
+				missed = n - k
+				break Loop
+			case <-timer.C:
 			}
 		}
+		if !time.Now().Before(deadline) {
+			// Absolute deadline: the rest of the schedule never happens.
+			missed = n - k
+			break Loop
+		}
+		opID := fmt.Sprintf("op-%d-%d", cfg.Seed, k+1)
+		if cfg.KeyPrefix != "" {
+			opID = cfg.KeyPrefix + "-" + opID
+		}
+		mu.Lock()
+		offered++
+		mu.Unlock()
+		select {
+		case jobs <- job{opID: opID, n: k + 1, planned: planned, seed: cfg.Seed}:
+		default:
+			mu.Lock()
+			dropped++
+			mu.Unlock()
+		}
 	}
+	scheduleSecs := time.Since(start).Seconds()
 	close(jobs)
-	wg.Wait()
-	el := time.Since(start)
+	drained := waitTimeout(&wg, drainWindow(cfg))
+	drainTimedOut := !drained
+	outstandingAtCap := 0
+	if drainTimedOut {
+		mu.Lock()
+		outstandingAtCap = launched - completed
+		mu.Unlock()
+		cancelRun() // bounded: abort what is still outstanding
+		wg.Wait()
+	}
+	elapsed := time.Since(start)
+	drainSecs := elapsed.Seconds() - scheduleSecs
+	if drainSecs < 0 {
+		drainSecs = 0
+	}
 
+	mu.Lock()
+	defer mu.Unlock()
 	sum := Summary{
-		Offered: ticked, Launched: launched,
-		Completed: completed, Dropped: dropped,
-		Outstanding: launched - completed, TransportErrors: transportErrs,
-		Successful:  successful,
-		AchievedRPS: float64(completed) / el.Seconds(),
-		Truncated:   ticked < n,
+		Planned: n, Offered: offered, Launched: launched,
+		Completed: completed, Dropped: dropped, Missed: missed,
+		Outstanding:     launched - completed,
+		Cancelled:       outstandingAtCap,
+		TransportErrors: transportErrs,
+		Successful:      successful,
+		ScheduleSeconds: scheduleSecs,
+		DrainSeconds:    drainSecs,
+		ElapsedSeconds:  elapsed.Seconds(),
+		DrainTimedOut:   drainTimedOut,
+		Truncated:       missed > 0,
 	}
 	sort.Float64s(lags)
 	sort.Float64s(lats)
@@ -184,18 +313,39 @@ Loop:
 	sum.LatP50Ms = pct(lats, 50)
 	sum.LatP95Ms = pct(lats, 95)
 	sum.LatP99Ms = pct(lats, 99)
+	if scheduleSecs > 0 {
+		sum.OfferedRPS = float64(offered) / scheduleSecs
+	}
+	if elapsed.Seconds() > 0 {
+		sum.AchievedRPS = float64(completed) / elapsed.Seconds()
+	}
 	sum.Valid = true
-	if sum.Offered == 0 {
+	switch {
+	case n == 0:
 		sum.Valid = false
-		sum.InvalidReason = "no ticks fired within duration"
-	} else if float64(sum.Dropped)/float64(sum.Offered) > 0.01 {
+		sum.InvalidReason = "no planned slots within duration"
+	case missed > 0:
+		sum.Valid = false
+		sum.InvalidReason = fmt.Sprintf("%d/%d planned slots missed (schedule stopped at deadline)", missed, n)
+	case offered != launched+dropped:
+		sum.Valid = false
+		sum.InvalidReason = fmt.Sprintf("accounting inconsistency: offered=%d launched=%d dropped=%d",
+			offered, launched, dropped)
+	case offered > 0 && float64(dropped)/float64(offered) > 0.01:
 		sum.Valid = false
 		sum.InvalidReason = fmt.Sprintf("drop rate %.2f%% > 1%%",
-			100*float64(sum.Dropped)/float64(sum.Offered))
-	}
-	if sum.Truncated {
+			100*float64(dropped)/float64(offered))
+	case offered == 0:
 		sum.Valid = false
-		sum.InvalidReason = "schedule truncated"
+		sum.InvalidReason = "no slots offered"
+	case sum.OfferedRPS < 0.9*cfg.Rate:
+		sum.Valid = false
+		sum.InvalidReason = fmt.Sprintf("delivery rate %.1f rps < 90%% of nominal %.1f rps",
+			sum.OfferedRPS, cfg.Rate)
+	case drainTimedOut:
+		sum.Valid = false
+		sum.InvalidReason = fmt.Sprintf("drain exceeded %s with %d outstanding (cancelled)",
+			drainWindow(cfg), outstandingAtCap)
 	}
 	if writeErr != nil {
 		sum.Valid = false
@@ -217,7 +367,8 @@ func (rn *Runner) once(ctx context.Context, cfg Config, j job) Attempt {
 	if cfg.KeyPrefix != "" {
 		key = cfg.KeyPrefix + "-" + key
 	}
-	att := Attempt{OpID: j.opID, AttemptID: 1, PlannedAt: j.planned, StartAt: time.Now(), KeyHash: hashStr(key)}
+	att := Attempt{OpID: j.opID, AttemptID: 1, PlannedAt: j.planned,
+		StartAt: time.Now(), Key: key, KeyHash: hashStr(key)}
 	sku := "demo-item"
 	if cfg.InvalidFraction > 0 {
 		h := fnv.New32a()
@@ -226,6 +377,7 @@ func (rn *Runner) once(ctx context.Context, cfg Config, j job) Attempt {
 			sku = "no-such-sku" // → 400 client_error, SLI-excluded
 		}
 	}
+	att.SKU, att.Qty = sku, 1
 	code, slot, resv, eclass := rn.post(ctx, cfg, key, 1, sku, 1)
 	// Correctness profile: ONE retry with the same key on any ambiguous or
 	// safely-retryable outcome (timeout, transport error, HTTP 503).

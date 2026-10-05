@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -59,7 +60,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `faultlab validate --scenario FILE
 faultlab plan --scenario FILE
 faultlab run --scenario FILE --out DIR [--db FILE] [--gateway URL] [--metrics URL]
-  [--kubeconfig PATH] [--api-admin URL]
+  [--kubeconfig PATH] [--api-admin URL] [--pg-dsn DSN] [--sku SKU]
 faultlab status --run-id ID [--db FILE]
 faultlab cleanup --run-id ID [--db FILE] [--gateway URL]
 faultlab reconcile [--db FILE] [--gateway URL]
@@ -119,6 +120,7 @@ fault:      %s delay=%dms fraction=%.2f ttl=%ds
 abort:      >%.0f%% failures over %dx%ds windows → cleanup + mark
 cleanup:     DELETE /admin/faults/%s-* (idempotent) + verify zero active;
             TTL expiry is gateway-enforced and independent of this runner
+recovery:    recoverySeconds load after cleanup; <%.0f%% failures over >=%d requests, then PASSED
 permissions: admin token on lab gateway only; no pod/node/cluster actions (F1/F2)
 `,
 		c.Name, sum,
@@ -126,7 +128,16 @@ permissions: admin token on lab gateway only; no pod/node/cluster actions (F1/F2
 		c.Rate, c.Seed, c.Timeout,
 		c.Baseline, c.FaultSecs, c.Recover,
 		c.FaultKind, c.DelayMs, c.Fraction, c.TTL,
-		c.AbortMax*100, c.AbortN, c.AbortWin, c.Name)
+		c.AbortMax*100, c.AbortN, c.AbortWin, c.Name,
+		c.AbortMax*100, faultlab.MinRecoverySamples)
+	switch {
+	case !c.AssertsDeclared:
+		fmt.Println("oracle:      no spec.assertions.* declared (ledger not required)")
+	case c.AssertDuplicates || c.AssertNegativeInv:
+		fmt.Println("oracle:      declared (requires --pg-dsn; assertions fail closed without a ledger)")
+	default:
+		fmt.Println("oracle:      assertions block present (requires --pg-dsn; checked against the ledger)")
+	}
 	return nil
 }
 
@@ -140,6 +151,8 @@ type liveFlags struct {
 	runID      string
 	kubeconfig string // enables pod_delete faults (empty = unsupported)
 	apiAdmin   string // enables dependency_failure faults (empty = unsupported)
+	pgdsn      string // ledger for spec.assertions.* (required when declared)
+	sku        string // oracle SKU override (default faultlab.DefaultSKU)
 }
 
 func parseLive(args []string) liveFlags {
@@ -160,6 +173,10 @@ func parseLive(args []string) liveFlags {
 			f.kubeconfig = args[i+1]
 		case "--api-admin":
 			f.apiAdmin = args[i+1]
+		case "--pg-dsn":
+			f.pgdsn = args[i+1]
+		case "--sku":
+			f.sku = args[i+1]
 		}
 	}
 	return f
@@ -195,10 +212,13 @@ func kubectlCurrentContext(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(raw)), nil
 }
 
-func openRunner(f liveFlags) (*faultlab.Runner, *faultlab.Journal, error) {
+// openRunner builds the live runner. The returned cleanup function closes
+// the ledger connection (always safe to call, never nil).
+func openRunner(f liveFlags) (*faultlab.Runner, *faultlab.Journal, func(), error) {
+	noDB := func() {}
 	j, err := faultlab.Open(f.db)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, noDB, err
 	}
 	inj := faultlab.NewGatewayInjector(f.gateway, adminToken(), "kind-sre-lab")
 	r := &faultlab.Runner{
@@ -207,18 +227,37 @@ func openRunner(f liveFlags) (*faultlab.Runner, *faultlab.Journal, error) {
 		CheckContext: defaultCheckContext,
 		LoadTimeout:  10 * time.Second, CleanupCap: 60 * time.Second,
 	}
+	if f.pgdsn != "" {
+		db, derr := sql.Open("pgx", f.pgdsn)
+		if derr != nil {
+			_ = j.Close()
+			return nil, nil, noDB, fmt.Errorf("ledger: %w", derr)
+		}
+		pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		perr := db.PingContext(pingCtx)
+		cancel()
+		if perr != nil {
+			_ = db.Close()
+			_ = j.Close()
+			return nil, nil, noDB, fmt.Errorf("ledger unreachable: %w", perr)
+		}
+		r.Ledger = faultlab.NewPGLedger(db)
+		r.SKU = f.sku
+		noDB = func() { db.Close() }
+	}
 	if f.kubeconfig != "" {
 		pods, err := podsFromKubeconfig(f.kubeconfig)
 		if err != nil {
 			_ = j.Close()
-			return nil, nil, err
+			noDB()
+			return nil, nil, noDB, err
 		}
 		r.Pods = pods
 	}
 	if f.apiAdmin != "" {
 		r.Dep = faultlab.NewHTTPDepFault(f.apiAdmin, adminToken())
 	}
-	return r, j, nil
+	return r, j, noDB, nil
 }
 
 func run(args []string) error {
@@ -227,14 +266,20 @@ func run(args []string) error {
 	if f.out == "" {
 		return fmt.Errorf("--out required")
 	}
+	// Assertions need the ledger; without it the run would fail closed at
+	// VERIFYING. Refuse before any journal row or mutation.
+	if cfg.AssertsDeclared && f.pgdsn == "" {
+		return fmt.Errorf("scenario declares spec.assertions.* but --pg-dsn was not provided (assertions fail closed)")
+	}
 	if err := os.MkdirAll(f.out, 0o755); err != nil {
 		return err
 	}
-	r, j, err := openRunner(f)
+	r, j, closeDB, err := openRunner(f)
 	if err != nil {
 		return err
 	}
 	defer j.Close()
+	defer closeDB()
 	runID := fmt.Sprintf("%s-%d", cfg.Name, time.Now().UTC().Unix())
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -282,11 +327,12 @@ func cleanup(args []string) error {
 	if f.runID == "" {
 		return fmt.Errorf("--run-id required")
 	}
-	r, j, err := openRunner(f)
+	r, j, closeDB, err := openRunner(f)
 	if err != nil {
 		return err
 	}
 	defer j.Close()
+	defer closeDB()
 	row, err := j.GetRun(f.runID)
 	if err != nil {
 		return err
@@ -306,11 +352,12 @@ func cleanup(args []string) error {
 
 func reconcile(args []string) error {
 	f := parseLive(args)
-	r, j, err := openRunner(f)
+	r, j, closeDB, err := openRunner(f)
 	if err != nil {
 		return err
 	}
 	defer j.Close()
+	defer closeDB()
 	fresh, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	done, err := r.Reconcile(fresh)

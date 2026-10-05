@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -289,5 +290,137 @@ func TestEvidenceWriteFailureReturned(t *testing.T) {
 	_, err := rn.Run(context.Background(), Config{Rate: 20, Duration: 100 * time.Millisecond, Timeout: time.Second})
 	if err == nil {
 		t.Fatal("evidence write failure hidden")
+	}
+}
+
+// A-1 regression: the schedule is bounded by the ABSOLUTE deadline
+// (start + duration), never by a far stall guard. A deliberate scheduler
+// stall must mark the remaining slots Missed and invalidate the run —
+// the old ticker loop kept firing until it received n ticks, so a stalled
+// scheduler stretched a configured duration and still reported Valid=true.
+func TestStalledScheduleStopsAtAbsoluteDeadline(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.Body.Close()
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer s.Close()
+	rn := &Runner{BaseURL: s.URL}
+	stalled := false
+	rn.hookSlot = func(k int) {
+		if k == 1 && !stalled {
+			stalled = true
+			time.Sleep(600 * time.Millisecond) // past the 500ms deadline
+		}
+	}
+	start := time.Now()
+	sum, err := rn.Run(context.Background(), Config{
+		Rate: 100, Duration: 500 * time.Millisecond, Seed: 1, Timeout: 2 * time.Second,
+	})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Planned != 50 {
+		t.Fatalf("planned=%d, want 50 (rate x duration)", sum.Planned)
+	}
+	if sum.Missed == 0 {
+		t.Fatalf("missed=0, want the slots after the stall recorded as missed (offered=%d)", sum.Offered)
+	}
+	if sum.Offered+sum.Missed != sum.Planned {
+		t.Fatalf("accounting: offered=%d missed=%d planned=%d",
+			sum.Offered, sum.Missed, sum.Planned)
+	}
+	if !sum.Truncated {
+		t.Fatal("deadline overrun must report Truncated")
+	}
+	if sum.Valid {
+		t.Fatalf("stalled schedule must be invalid, reason=%q", sum.InvalidReason)
+	}
+	if !strings.Contains(sum.InvalidReason, "missed") {
+		t.Fatalf("invalid reason should name missed slots, got %q", sum.InvalidReason)
+	}
+	// Bounded: the old duration+30s stall guard would allow ~30.5s here.
+	if elapsed > 5*time.Second {
+		t.Fatalf("stalled schedule took %v for a 500ms run", elapsed)
+	}
+}
+
+// A-2 regression: scheduling duration and bounded draining are reported
+// separately, and delivery is measured over the SCHEDULE window.
+func TestScheduleAndDrainReportedSeparately(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.Body.Close()
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer s.Close()
+	rn := &Runner{BaseURL: s.URL}
+	sum, err := rn.Run(context.Background(), Config{
+		Rate: 50, Duration: time.Second, Seed: 7, Timeout: 2 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Missed != 0 || sum.Truncated {
+		t.Fatalf("clean run: missed=%d truncated=%v", sum.Missed, sum.Truncated)
+	}
+	if sum.Planned != 50 || sum.Offered != 50 {
+		t.Fatalf("planned=%d offered=%d, want 50/50", sum.Planned, sum.Offered)
+	}
+	if sum.ScheduleSeconds < 0.8 || sum.ScheduleSeconds > 2.5 {
+		t.Fatalf("schedule seconds %.3f, want ≈1s (duration must not absorb drain)", sum.ScheduleSeconds)
+	}
+	if sum.ElapsedSeconds < sum.ScheduleSeconds {
+		t.Fatalf("elapsed %.3f < schedule %.3f", sum.ElapsedSeconds, sum.ScheduleSeconds)
+	}
+	if sum.OfferedRPS < 45 || sum.OfferedRPS > 60 {
+		t.Fatalf("offered rps %.1f, want ≈50", sum.OfferedRPS)
+	}
+	if sum.AchievedRPS <= 0 {
+		t.Fatal("achieved rps must be reported")
+	}
+	if sum.Cancelled != 0 || sum.DrainTimedOut {
+		t.Fatalf("clean run must not cancel work: cancelled=%d drainTimedOut=%v",
+			sum.Cancelled, sum.DrainTimedOut)
+	}
+	if !sum.Valid {
+		t.Fatalf("clean run invalid: %q", sum.InvalidReason)
+	}
+}
+
+// A-3 regression: draining is bounded. Work still in flight when the drain
+// window closes is cancelled and invalidates the run instead of waiting
+// unboundedly.
+func TestBoundedDrainCancelsAndInvalidates(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(600 * time.Millisecond)
+		_ = r.Body.Close()
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer s.Close()
+	rn := &Runner{BaseURL: s.URL}
+	start := time.Now()
+	sum, err := rn.Run(context.Background(), Config{
+		Rate: 4, Duration: time.Second, Seed: 2, Timeout: 5 * time.Second,
+		Workers: 2, DrainTimeout: 300 * time.Millisecond,
+	})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sum.DrainTimedOut || sum.Cancelled == 0 {
+		t.Fatalf("want cancelled work at the drain cap: drainTimedOut=%v cancelled=%d",
+			sum.DrainTimedOut, sum.Cancelled)
+	}
+	if sum.Valid {
+		t.Fatalf("drain overrun must invalidate the run: %q", sum.InvalidReason)
+	}
+	if !strings.Contains(sum.InvalidReason, "drain exceeded") {
+		t.Fatalf("reason=%q", sum.InvalidReason)
+	}
+	if elapsed > 4*time.Second {
+		t.Fatalf("bounded drain took %v", elapsed)
 	}
 }

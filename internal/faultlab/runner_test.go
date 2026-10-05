@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -29,6 +30,13 @@ type labDouble struct {
 	failEvery int
 	slot      string
 	down      atomic.Bool
+	// hang blocks every reservation request until the client gives up:
+	// used to starve a workload phase of completions.
+	hang atomic.Bool
+	// breakPrefix 500s any reservation whose Idempotency-Key starts with it,
+	// which lets a test break exactly one phase (phase key namespaces are
+	// disjoint: recovery uses load-<seed+2000000>-N).
+	breakPrefix atomic.Pointer[string]
 }
 
 func newLabDouble(t *testing.T, slot string, failEvery int) *labDouble {
@@ -51,6 +59,18 @@ func newLabDouble(t *testing.T, slot string, failEvery int) *labDouble {
 			fmt.Fprintf(w, `lab_requests_total{service="reservations",slot=%q,route="/v1/reservations",result="success"} %d
 lab_requests_total{service="reservations",slot=%q,route="/v1/reservations",result="server_error"} %d
 `, d.slot, total-failed, d.slot, failed)
+			return
+		}
+		if p := d.breakPrefix.Load(); p != nil &&
+			strings.HasPrefix(r.Header.Get("Idempotency-Key"), *p) {
+			d.total.Add(1)
+			d.failed.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"still broken"}`))
+			return
+		}
+		if d.hang.Load() {
+			<-r.Context().Done()
 			return
 		}
 		n := d.total.Add(1)
@@ -377,6 +397,9 @@ func TestPhaseSeedOffset(t *testing.T) {
 	if got := phaseSeedOffset("fault"); got != 1000000 {
 		t.Fatalf("fault offset=%d, want 1000000", got)
 	}
+	if got := phaseSeedOffset("recovery"); got != 2000000 {
+		t.Fatalf("recovery offset=%d, want 2000000", got)
+	}
 }
 
 func TestPhaseKeyNamespacesDisjoint(t *testing.T) {
@@ -386,7 +409,7 @@ func TestPhaseKeyNamespacesDisjoint(t *testing.T) {
 	}))
 	defer s.Close()
 	hashes := map[string]string{}
-	for _, phase := range []string{"baseline", "fault"} {
+	for _, phase := range []string{"baseline", "fault", "recovery"} {
 		var buf strings.Builder
 		rn := &loadgen.Runner{BaseURL: s.URL, Out: &writerFunc{fn: func(p []byte) (int, error) {
 			return buf.Write(p)
@@ -410,8 +433,8 @@ func TestPhaseKeyNamespacesDisjoint(t *testing.T) {
 			hashes[a.KeyHash] = phase
 		}
 	}
-	if len(hashes) != 80 {
-		t.Fatalf("hashes=%d, want 80 (40 per phase, disjoint)", len(hashes))
+	if len(hashes) != 120 {
+		t.Fatalf("hashes=%d, want 120 (40 per phase, disjoint)", len(hashes))
 	}
 }
 
@@ -420,3 +443,257 @@ type writerFunc struct {
 }
 
 func (w *writerFunc) Write(p []byte) (int, error) { return w.fn(p) }
+
+// ---- Finding D: cleanup status and post-cleanup health are distinct ----
+
+// eventKinds lists one run's journal events in write order.
+func eventKinds(t *testing.T, j *Journal, runID string) []string {
+	t.Helper()
+	rows, err := j.db.Query(`SELECT kind FROM events WHERE run_id = ? ORDER BY rowid`, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var kinds []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatal(err)
+		}
+		kinds = append(kinds, k)
+	}
+	return kinds
+}
+
+func hasEvent(kinds []string, want string) bool {
+	for _, k := range kinds {
+		if k == want {
+			return true
+		}
+	}
+	return false
+}
+
+// A run whose service still answers 500 after cleanup must not pass: cleanup
+// restoration alone is not recovery.
+func TestRecoveryUnhealthyFailsRun(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	prefix := fmt.Sprintf("load-%d-", testScenario().Seed+phaseSeedOffset("recovery"))
+	d.breakPrefix.Store(&prefix)
+	r, j, f := testRunner(t, d.srv.URL)
+	sc := testScenario()
+
+	term, err := r.Run(context.Background(), sc, "run-unhealthy")
+	if err == nil {
+		t.Fatal("expected an error from an unhealthy recovery phase")
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED (never PASSED on unhealthy service)", term)
+	}
+	if !strings.Contains(err.Error(), "not healthy") {
+		t.Fatalf("error=%q, want the post-cleanup health reason", err.Error())
+	}
+	row, _ := j.GetRun("run-unhealthy")
+	if row.State != StFailed {
+		t.Fatalf("journal=%s, want FAILED", row.State)
+	}
+	if live, _ := f.Active(context.Background()); len(live) != 0 {
+		t.Fatalf("faults live after run: %v", live)
+	}
+	kinds := eventKinds(t, j, "run-unhealthy")
+	for _, want := range []string{"cleanup-ok", "recovery-health", "recovery-failed", "phase-load"} {
+		if !hasEvent(kinds, want) {
+			t.Fatalf("event %q missing from %v", want, kinds)
+		}
+	}
+	if hasEvent(kinds, "recovery-ok") {
+		t.Fatalf("recovery-ok recorded for an unhealthy run: %v", kinds)
+	}
+	// The failing recovery phase keeps its evidence.
+	raw, rerr := os.ReadFile(filepath.Join(r.OutDir, "phases.json"))
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	var ph struct {
+		Phases []PhaseResult `json:"phases"`
+	}
+	if err := json.Unmarshal(raw, &ph); err != nil {
+		t.Fatal(err)
+	}
+	var sawRecovery bool
+	for _, p := range ph.Phases {
+		if p.Phase != "recovery" {
+			continue
+		}
+		sawRecovery = true
+		if p.Summary.Completed == 0 || p.Summary.Valid != (p.Summary.InvalidReason == "") {
+			t.Fatalf("recovery summary implausible: %+v", p.Summary)
+		}
+	}
+	if !sawRecovery {
+		t.Fatalf("phases.json has no recovery phase: %s", raw)
+	}
+}
+
+// Declared assertions without a configured ledger fail closed.
+func TestAssertionsWithoutLedgerFailClosed(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	sc.AssertsDeclared = true
+	sc.AssertDuplicates, sc.AssertNegativeInv = true, true
+
+	term, err := r.Run(context.Background(), sc, "run-no-ledger")
+	if err == nil {
+		t.Fatal("expected failure when assertions are declared without a ledger")
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED", term)
+	}
+	if !strings.Contains(err.Error(), "no ledger configured") {
+		t.Fatalf("error=%q, want fail-closed ledger reason", err.Error())
+	}
+	kinds := eventKinds(t, j, "run-no-ledger")
+	if !hasEvent(kinds, "recovery-failed") {
+		t.Fatalf("recovery-failed missing: %v", kinds)
+	}
+	if hasEvent(kinds, "oracle") {
+		t.Fatalf("oracle event written without a ledger: %v", kinds)
+	}
+}
+
+// Cleanup status and recovery status are recorded separately: an aborted
+// observation cleans up but never claims recovery.
+func TestAbortRecordsRecoverySkipped(t *testing.T) {
+	d := newLabDouble(t, "stable", 1) // every request fails → abort
+	r, j, _ := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	sc.FaultSecs = 5 // abort needs ~3 one-second ticks to see two windows
+
+	term, err := r.Run(context.Background(), sc, "run-abort")
+	if err == nil {
+		t.Fatal("expected an abort failure")
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED", term)
+	}
+	if !strings.Contains(err.Error(), "abort") {
+		t.Fatalf("error=%q, want the abort reason", err.Error())
+	}
+	kinds := eventKinds(t, j, "run-abort")
+	if !hasEvent(kinds, "cleanup-ok") {
+		t.Fatalf("cleanup-ok missing after a successful cleanup: %v", kinds)
+	}
+	if !hasEvent(kinds, "recovery-skipped") {
+		t.Fatalf("recovery-skipped missing: %v", kinds)
+	}
+	if hasEvent(kinds, "recovery-ok") {
+		t.Fatalf("recovery-ok recorded for an aborted run: %v", kinds)
+	}
+}
+
+// ---- Finding E: invalid workloads and persistence failures block PASSED ----
+
+// A phase that delivers nothing is an invalid workload: it must fail the run
+// and be persisted as evidence instead of being silently ignored.
+func TestInvalidWorkloadNeverPasses(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	sc := testScenario()
+	// Parseable scenario: rate > 0 but 0 planned slots in a 1s phase.
+	sc.Rate = 0.5
+
+	term, err := r.Run(context.Background(), sc, "run-invalid")
+	if err == nil {
+		t.Fatal("expected failure for a workload with no planned slots")
+	}
+	if term == StPassed {
+		t.Fatalf("terminal=PASSED for an invalid workload (error %v)", err)
+	}
+	if term != StFailed {
+		t.Fatalf("terminal=%s, want FAILED", term)
+	}
+	if !strings.Contains(err.Error(), "invalid workload (baseline)") {
+		t.Fatalf("error=%q, want invalid-workload reason", err.Error())
+	}
+	kinds := eventKinds(t, j, "run-invalid")
+	if !hasEvent(kinds, "phase-load") {
+		t.Fatalf("phase-load evidence event missing: %v", kinds)
+	}
+	if !hasEvent(kinds, "recovery-skipped") {
+		t.Fatalf("recovery-skipped missing: %v", kinds)
+	}
+	raw, rerr := os.ReadFile(filepath.Join(r.OutDir, "phases.json"))
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	var ph struct {
+		Phases []PhaseResult `json:"phases"`
+	}
+	if err := json.Unmarshal(raw, &ph); err != nil {
+		t.Fatal(err)
+	}
+	if len(ph.Phases) == 0 {
+		t.Fatalf("no phase evidence written: %s", raw)
+	}
+	if ph.Phases[0].Phase != "baseline" || ph.Phases[0].Summary.Valid {
+		t.Fatalf("invalid baseline not preserved: %+v", ph.Phases[0])
+	}
+	if ph.Phases[0].Summary.InvalidReason == "" {
+		t.Fatalf("missing invalid reason: %+v", ph.Phases[0])
+	}
+}
+
+// Failing to persist phase evidence fails the run: evidence loss is never a
+// warning.
+func TestEvidenceWriteFailureFailsRun(t *testing.T) {
+	d := newLabDouble(t, "stable", 0)
+	r, j, _ := testRunner(t, d.srv.URL)
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.OutDir = blocker
+	sc := testScenario()
+
+	term, err := r.Run(context.Background(), sc, "run-evidence")
+	if err == nil {
+		t.Fatal("expected failure when phase evidence cannot be written")
+	}
+	if term == StPassed {
+		t.Fatalf("terminal=PASSED despite failed evidence write (error %v)", err)
+	}
+	if !strings.Contains(err.Error(), "phases.json") {
+		t.Fatalf("error=%q, want the evidence-write failure", err.Error())
+	}
+	row, _ := j.GetRun("run-evidence")
+	if row.State == StPassed {
+		t.Fatalf("journal state PASSED after evidence failure: %s", row.State)
+	}
+}
+
+// A journal write failure in the phase-persist path propagates instead of
+// being swallowed.
+func TestPhasePersistJournalErrorPropagates(t *testing.T) {
+	r, j, _ := testRunner(t, "http://127.0.0.1:1")
+	if _, err := j.db.Exec(`DROP TABLE events`); err != nil {
+		t.Fatal(err)
+	}
+	err := r.recordPhase("run-x", "baseline", loadgen.Summary{Valid: false, InvalidReason: "simulated"})
+	if err == nil {
+		t.Fatal("journal failure was swallowed")
+	}
+	if !strings.Contains(err.Error(), "phase-load") {
+		t.Fatalf("error=%q, want the phase-load journal failure", err.Error())
+	}
+}
+
+// Recovery keys are a third namespace: baseline, fault and recovery never
+// re-offer each other's idempotency keys.
+func TestRecoverySeedOffsetDisjoint(t *testing.T) {
+	if phaseSeedOffset("recovery") == phaseSeedOffset("baseline") ||
+		phaseSeedOffset("recovery") == phaseSeedOffset("fault") {
+		t.Fatalf("recovery shares a seed namespace: baseline=%d fault=%d recovery=%d",
+			phaseSeedOffset("baseline"), phaseSeedOffset("fault"), phaseSeedOffset("recovery"))
+	}
+}

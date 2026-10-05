@@ -8,6 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"sre-portfolio/internal/clock"
@@ -27,12 +31,42 @@ type Runner struct {
 	Pods *PodDeleter
 	Dep  DepFaultCtl
 
+	// Ledger enables declared spec.assertions.* checks (F4 oracle). A
+	// scenario that declares an assertion without a configured ledger can
+	// never reach PASSED — assertions fail closed, never silently skip.
+	Ledger Ledger
+	// SKU is the inventory the oracle checks (default DefaultSKU).
+	SKU string
+
 	// CheckContext verifies the kube context before any mutation.
 	// Defaults to a kubectl lookup; tests inject fakes.
 	CheckContext func(ctx context.Context) error
 
 	LoadTimeout time.Duration
 	CleanupCap  time.Duration
+
+	mu       sync.Mutex
+	phases   map[string][]PhaseResult     // runID → persisted phase summaries
+	attempts map[string][]loadgen.Attempt // runID+"|"+phase → attempts
+}
+
+// DefaultSKU is the workload SKU the load generator offers and the SKU the
+// correctness oracle audits.
+const DefaultSKU = "demo-item"
+
+// PhaseResult is the persisted outcome of one workload phase. Every phase
+// keeps its own summary: an invalid or truncated phase is evidence, and an
+// invalid phase can never be part of a PASSED run.
+type PhaseResult struct {
+	Phase   string          `json:"phase"`
+	Summary loadgen.Summary `json:"summary"`
+}
+
+func (r *Runner) sku() string {
+	if r.SKU == "" {
+		return DefaultSKU
+	}
+	return r.SKU
 }
 
 // slotDeployment maps experiment slots to lab Deployments.
@@ -63,7 +97,7 @@ func (r *Runner) backendFor(kind string) error {
 func faultIDFor(runID string) string { return runID + "-f1" }
 
 // Run executes the full lifecycle, returning the terminal state.
-func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, error) {
+func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (term string, err error) {
 	j := r.Journal
 	if err := r.backendFor(sc.FaultKind); err != nil {
 		return "", err // unsupported kind: no journal row, no lock, no mutation
@@ -74,16 +108,17 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 	}
 	cur := StCreated
 	// Safety net: any early return without a terminal state forces the
-	// cleanup path on a FRESH context (cancellation-safe).
+	// cleanup path on a FRESH context (cancellation-safe) and REPORTS the
+	// state it reached instead of an empty terminal.
 	terminal := ""
 	defer func() {
-		if terminal != "" {
-			return
+		if terminal == "" {
+			fresh, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.cleanupCap())
+			t, _ := r.toCleaning(fresh, runID, sc, cur, "interrupted")
+			cancel()
+			terminal = t
 		}
-		fresh, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.cleanupCap())
-		defer cancel()
-		t, _ := r.toCleaning(fresh, runID, cur, "interrupted")
-		terminal = t
+		term = terminal
 	}()
 	step := func(to, event, payload string) error {
 		if err := j.Transition(runID, cur, to, event, payload, ""); err != nil {
@@ -95,7 +130,7 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 
 	if r.CheckContext != nil {
 		if err := r.CheckContext(ctx); err != nil {
-			t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "context: "+err.Error())
+			t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, sc, cur, "context: "+err.Error())
 			terminal = t
 			return terminal, fmt.Errorf("context refused: %w", err)
 		}
@@ -108,7 +143,7 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 	_, perr := r.Injector.Active(pctx)
 	cancel()
 	if perr != nil {
-		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "preflight: "+perr.Error())
+		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, sc, cur, "preflight: "+perr.Error())
 		terminal = t
 		return terminal, fmt.Errorf("preflight: %w", perr)
 	}
@@ -116,8 +151,8 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 	if err := step(StBaseline, "baseline-start", "{}"); err != nil {
 		return "", err
 	}
-	if _, err := r.load(ctx, sc, "baseline", sc.Baseline); err != nil {
-		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "baseline load: "+err.Error())
+	if err := r.runPhase(ctx, sc, runID, "baseline", sc.Baseline); err != nil {
+		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, sc, cur, err.Error())
 		terminal = t
 		return terminal, err
 	}
@@ -126,7 +161,7 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 		return "", err
 	}
 	if err := r.applyFault(ctx, j, runID, sc); err != nil {
-		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, "apply: "+err.Error())
+		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, sc, cur, "apply: "+err.Error())
 		terminal = t
 		return terminal, err
 	}
@@ -134,13 +169,13 @@ func (r *Runner) Run(ctx context.Context, sc Scenario, runID string) (string, er
 	if err := step(StObserving, "observe-start", "{}"); err != nil {
 		return "", err
 	}
-	outcome := r.observe(ctx, sc)
+	outcome := r.observe(ctx, sc, runID)
 	if outcome != "" {
-		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, cur, outcome)
+		t, _ := r.toCleaning(context.WithoutCancel(ctx), runID, sc, cur, outcome)
 		terminal = t
 		return terminal, fmt.Errorf("observing ended: %s", outcome)
 	}
-	t, verr := r.verify(context.WithoutCancel(ctx), runID, cur)
+	t, verr := r.verify(context.WithoutCancel(ctx), runID, sc, cur)
 	terminal = t
 	return terminal, verr
 }
@@ -247,29 +282,118 @@ func (r *Runner) clearFault(ctx context.Context, runID string, f FaultRow) error
 	}
 }
 
-// phaseSeedOffset keeps per-phase operation/key namespaces disjoint: the
-// fault phase must not re-offer baseline keys as accidental replays
-// (contract §5/§7). Baseline keeps the scenario seed for compatibility;
-// later phases offset by a fixed stride larger than any bounded run.
+// phaseSeedOffset keeps per-phase operation/key namespaces disjoint: no
+// phase may re-offer another phase's keys (contract §5/§7). Baseline keeps
+// the scenario seed for compatibility; later phases offset by a fixed
+// stride larger than any bounded run.
 func phaseSeedOffset(phase string) int64 {
-	if phase == "fault" {
+	switch phase {
+	case "fault":
 		return 1000000
+	case "recovery":
+		return 2000000
 	}
 	return 0
 }
 
-// load runs one workload phase.
-func (r *Runner) load(ctx context.Context, sc Scenario, phase string, secs int64) (loadgen.Summary, error) {
+// load runs one workload phase. When the scenario declared assertions the
+// attempts are also collected for the correctness oracle.
+func (r *Runner) load(ctx context.Context, sc Scenario, runID, phase string, secs int64) (loadgen.Summary, error) {
+	// Attempts are always recorded: recovery health and the oracle read
+	// them, and every phase keeps its own request accounting.
 	rn := &loadgen.Runner{BaseURL: r.Gateway, Out: nil}
+	rn.OnAttempt = func(a loadgen.Attempt) { r.addAttempt(runID, phase, a) }
 	return rn.Run(ctx, loadgen.Config{
 		Rate: sc.Rate, Duration: time.Duration(secs) * time.Second,
 		Seed: sc.Seed + phaseSeedOffset(phase), Timeout: time.Duration(sc.Timeout) * time.Second,
 	})
 }
 
-// observe runs fault-duration load with 1s abort/telemetry polling.
-// Returns "" on clean completion, else the reason for cleanup.
-func (r *Runner) observe(ctx context.Context, sc Scenario) string {
+// addAttempt records one attempt for oracle and health analysis.
+func (r *Runner) addAttempt(runID, phase string, a loadgen.Attempt) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.attempts == nil {
+		r.attempts = map[string][]loadgen.Attempt{}
+	}
+	r.attempts[runID+"|"+phase] = append(r.attempts[runID+"|"+phase], a)
+}
+
+// phaseAttempts returns a copy of one phase's attempts.
+func (r *Runner) phaseAttempts(runID, phase string) []loadgen.Attempt {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]loadgen.Attempt(nil), r.attempts[runID+"|"+phase]...)
+}
+
+// recordPhase persists one phase summary (finding E). The journal event and
+// OutDir/phases.json are evidence: a write failure is an error, never a
+// warning that lets the run continue as if the phase had not happened.
+func (r *Runner) recordPhase(runID, phase string, sum loadgen.Summary) error {
+	pr := PhaseResult{Phase: phase, Summary: sum}
+	r.mu.Lock()
+	if r.phases == nil {
+		r.phases = map[string][]PhaseResult{}
+	}
+	r.phases[runID] = append(r.phases[runID], pr)
+	all := append([]PhaseResult(nil), r.phases[runID]...)
+	r.mu.Unlock()
+	payload, err := json.Marshal(pr)
+	if err != nil {
+		return err
+	}
+	if err := r.Journal.AppendEvent(runID, "phase-load", string(payload)); err != nil {
+		return fmt.Errorf("journal phase-load: %w", err)
+	}
+	if r.OutDir == "" {
+		return nil
+	}
+	raw, err := json.MarshalIndent(map[string]any{"run": runID, "phases": all}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(r.OutDir, "phases.json"), append(raw, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write phases.json: %w", err)
+	}
+	return nil
+}
+
+// runPhase executes one workload phase, persists its summary, and enforces
+// its delivery validity. An invalid or truncated workload is evidence of a
+// failed experiment — it can never contribute to PASSED.
+func (r *Runner) runPhase(ctx context.Context, sc Scenario, runID, phase string, secs int64) error {
+	sum, err := r.load(ctx, sc, runID, phase, secs)
+	if perr := r.recordPhase(runID, phase, sum); perr != nil {
+		return perr
+	}
+	if err != nil {
+		return fmt.Errorf("%s load: %w", phase, err)
+	}
+	if !sum.Valid {
+		return fmt.Errorf("invalid workload (%s): %s", phase, sum.InvalidReason)
+	}
+	return nil
+}
+
+// invalidPhases re-checks every persisted phase (belt and braces: each phase
+// is enforced when it runs; this stops a PASSED verdict if any phase slipped
+// through).
+func (r *Runner) invalidPhases(runID string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.phases[runID] {
+		if !p.Summary.Valid {
+			return fmt.Sprintf("invalid workload (%s): %s", p.Phase, p.Summary.InvalidReason)
+		}
+	}
+	return ""
+}
+
+// observe runs fault-duration load with 1s abort/telemetry policing.
+// Returns "" on clean completion, else the reason for cleanup. Every path
+// persists the fault phase summary when one exists (aborted and cancelled
+// runs keep their evidence too).
+func (r *Runner) observe(ctx context.Context, sc Scenario, runID string) string {
 	type res struct {
 		sum loadgen.Summary
 		err error
@@ -278,9 +402,42 @@ func (r *Runner) observe(ctx context.Context, sc Scenario) string {
 	lctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
-		sum, err := r.load(lctx, sc, "fault", sc.FaultSecs)
+		sum, err := r.load(lctx, sc, runID, "fault", sc.FaultSecs)
 		done <- res{sum, err}
 	}()
+	// finalize persists the summary and folds load errors or an invalid
+	// workload into the returned cleanup reason.
+	finalize := func(out res, reason string) string {
+		if perr := r.recordPhase(runID, "fault", out.sum); perr != nil {
+			if reason == "" {
+				reason = "persist fault summary: " + perr.Error()
+			} else {
+				reason += "; persist fault summary: " + perr.Error()
+			}
+			return reason
+		}
+		if reason != "" {
+			return reason
+		}
+		if out.err != nil {
+			return "load: " + out.err.Error()
+		}
+		if !out.sum.Valid {
+			return "invalid workload (fault): " + out.sum.InvalidReason
+		}
+		return ""
+	}
+	// drain waits (bounded) for the cancelled load so its truncated summary
+	// is still recorded as evidence.
+	drain := func(reason string) string {
+		cancel()
+		select {
+		case out := <-done:
+			return finalize(out, reason)
+		case <-time.After(5 * time.Second):
+			return reason
+		}
+	}
 	obs := NewObserver(r.Gateway+"/metrics", sc.Slot)
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -288,26 +445,20 @@ func (r *Runner) observe(ctx context.Context, sc Scenario) string {
 	for {
 		select {
 		case <-ctx.Done():
-			cancel()
-			return "cancelled"
+			return drain("cancelled")
 		case out := <-done:
-			if out.err != nil {
-				return "load: " + out.err.Error()
-			}
-			return "" // full fault window observed without abort
+			return finalize(out, "")
 		case <-tick.C:
 			if _, err := obs.Scrape(ctx); err != nil {
 				strikes++
 				if strikes >= 3 {
-					cancel()
-					return "telemetry lost: " + err.Error()
+					return drain("telemetry lost: " + err.Error())
 				}
 				continue
 			}
 			strikes = 0
 			if obs.AbortTripped(sc.AbortMax, int(sc.AbortN), time.Duration(sc.AbortWin)*time.Second) {
-				cancel()
-				return fmt.Sprintf("abort: failure ratio above %.0f%%", sc.AbortMax*100)
+				return drain(fmt.Sprintf("abort: failure ratio above %.0f%%", sc.AbortMax*100))
 			}
 		}
 	}
@@ -315,7 +466,7 @@ func (r *Runner) observe(ctx context.Context, sc Scenario) string {
 
 // toCleaning runs the uniform cleanup path on the GIVEN (fresh, bounded)
 // context: clear recorded faults, verify zero active, then verify recovery.
-func (r *Runner) toCleaning(ctx context.Context, runID, cur, reason string) (string, error) {
+func (r *Runner) toCleaning(ctx context.Context, runID string, sc Scenario, cur, reason string) (string, error) {
 	j := r.Journal
 	if cur == StCreated || cur == StPreflight || cur == StBaseline ||
 		cur == StInjecting || cur == StObserving {
@@ -355,45 +506,236 @@ func (r *Runner) toCleaning(ctx context.Context, runID, cur, reason string) (str
 	if err := j.Transition(runID, StCleaning, StVerifying, "verify", "{}", ""); err != nil {
 		return r.currentState(runID)
 	}
-	return r.finishVerify(ctx, runID, reason)
+	return r.finishVerify(ctx, runID, sc, reason)
 }
 
-// markCleanupFailed records CLEANUP_FAILED (never a success state).
+// markCleanupFailed records CLEANUP_FAILED (never a success state). Journal
+// write failures are reported, not discarded.
 func (r *Runner) markCleanupFailed(ctx context.Context, runID, cur, reason string) (string, error) {
 	_ = ctx
+	j := r.Journal
+	var jerr error
+	walk := func(from, to, event string) {
+		if jerr != nil {
+			return
+		}
+		if err := j.Transition(runID, from, to, event, "{}", ""); err != nil {
+			jerr = fmt.Errorf("journal %s->%s: %w", from, to, err)
+		}
+	}
 	from := cur
 	if from != StCleaning {
 		// Walk to CLEANING first if we are earlier (legal path only).
 		for _, s := range []string{StPreflight, StBaseline, StInjecting, StObserving} {
 			if from == s {
-				_ = r.Journal.Transition(runID, from, StCleaning, "cleanup", "{}", "")
+				walk(from, StCleaning, "cleanup")
 				from = StCleaning
 				break
 			}
 		}
 	}
 	if from == StCreated {
-		_ = r.Journal.Transition(runID, StCreated, StPreflight, "preflight", "{}", "")
-		_ = r.Journal.Transition(runID, StPreflight, StCleaning, "cleanup", "{}", "")
+		walk(StCreated, StPreflight, "preflight")
+		walk(StPreflight, StCleaning, "cleanup")
 		from = StCleaning
 	}
-	_ = r.Journal.Transition(runID, from, StCleanupF, "cleanup-failed", "{}", reason)
+	if jerr == nil {
+		if err := j.Transition(runID, from, StCleanupF, "cleanup-failed", "{}", reason); err != nil {
+			jerr = fmt.Errorf("journal cleanup-failed: %w", err)
+		}
+	}
+	if jerr != nil {
+		return StCleanupF, fmt.Errorf("%s; %v", reason, jerr)
+	}
 	return StCleanupF, fmt.Errorf("%s", reason)
 }
 
-// finishVerify checks post-cleanup health, then PASSED or FAILED.
-func (r *Runner) finishVerify(ctx context.Context, runID, reason string) (string, error) {
+// finishVerify lands VERIFYING after a successful cleanup. Cleanup success
+// alone is never PASSED (finding D): a non-clean observation reason fails
+// immediately; otherwise the configured recovery phase, workload validity,
+// and any declared assertions decide the verdict.
+func (r *Runner) finishVerify(ctx context.Context, runID string, sc Scenario, reason string) (string, error) {
+	j := r.Journal
+	cleanupDone := time.Now()
+	// Cleanup status first: restoration is a separate fact from whether the
+	// service then proved healthy.
+	if err := j.AppendEvent(runID, "cleanup-ok", `{"restored":true}`); err != nil {
+		return "", fmt.Errorf("journal: %w", err)
+	}
 	if reason != "" && reason != "observe-complete" {
-		_ = r.Journal.Transition(runID, StVerifying, StFailed, "resolved", "{}", reason)
+		payload, _ := json.Marshal(map[string]string{
+			"reason": reason, "note": "recovery phase not executed",
+		})
+		if err := j.AppendEvent(runID, "recovery-skipped", string(payload)); err != nil {
+			return "", fmt.Errorf("%s; journal: %v", reason, err)
+		}
+		if err := j.Transition(runID, StVerifying, StFailed, "resolved", "{}", reason); err != nil {
+			return "", fmt.Errorf("%s; journal: %v", reason, err)
+		}
 		return StFailed, fmt.Errorf("%s", reason)
 	}
-	_ = r.Journal.Transition(runID, StVerifying, StPassed, "resolved", "{}", "")
+	return r.verifyRecovery(ctx, runID, sc, cleanupDone)
+}
+
+// MinRecoverySamples is the smallest post-cleanup request count that can say
+// anything about health: below it a zero failure ratio proves nothing.
+const MinRecoverySamples = 3
+
+// recoveryHealth summarises post-cleanup requests. A 5xx, a timeout, a
+// transport failure, or a request with no response is a failure; 4xx are
+// counted only as answered (they prove the service is up, not healthy).
+type recoveryHealth struct {
+	Attempts int     `json:"attempts"`
+	Success  int     `json:"success"`
+	Failures int     `json:"failures"`
+	Ratio    float64 `json:"failure_ratio"`
+}
+
+func healthOf(attempts []loadgen.Attempt) recoveryHealth {
+	var h recoveryHealth
+	for _, a := range attempts {
+		h.Attempts++
+		failed := a.Code == 0 || a.Code >= 500 ||
+			a.ErrClass == "timeout" || a.ErrClass == "transport"
+		switch {
+		case failed:
+			h.Failures++
+		case a.Code >= 200 && a.Code < 300:
+			h.Success++
+		}
+	}
+	if h.Attempts > 0 {
+		h.Ratio = float64(h.Failures) / float64(h.Attempts)
+	}
+	return h
+}
+
+// verifyRecovery executes the configured recovery phase on the restored
+// service, persists its health, then decides PASSED or FAILED. Cleanup
+// restoration and post-cleanup health are separate journal events.
+func (r *Runner) verifyRecovery(ctx context.Context, runID string, sc Scenario, cleanupDone time.Time) (string, error) {
+	j := r.Journal
+	fail := func(reason string) (string, error) {
+		payload, _ := json.Marshal(map[string]string{"reason": reason})
+		if err := j.AppendEvent(runID, "recovery-failed", string(payload)); err != nil {
+			return "", fmt.Errorf("%s; journal: %v", reason, err)
+		}
+		if err := j.Transition(runID, StVerifying, StFailed, "resolved", "{}", reason); err != nil {
+			return "", fmt.Errorf("%s; journal: %v", reason, err)
+		}
+		return StFailed, fmt.Errorf("%s", reason)
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, time.Duration(sc.Recover+60)*time.Second)
+	defer cancel()
+	loadErr := r.runPhase(rctx, sc, runID, "recovery", sc.Recover)
+	attempts := r.phaseAttempts(runID, "recovery")
+	h := healthOf(attempts)
+	healthPayload, err := json.Marshal(struct {
+		Phase  string         `json:"phase"`
+		Health recoveryHealth `json:"health"`
+	}{Phase: "recovery", Health: h})
+	if err != nil {
+		return "", fmt.Errorf("marshal recovery health: %w", err)
+	}
+	if err := j.AppendEvent(runID, "recovery-health", string(healthPayload)); err != nil {
+		return "", fmt.Errorf("journal: %w", err)
+	}
+	if loadErr != nil {
+		return fail(loadErr.Error())
+	}
+	if reason := r.invalidPhases(runID); reason != "" {
+		return fail(reason)
+	}
+	if h.Attempts < MinRecoverySamples {
+		return fail(fmt.Sprintf("recovery not measurable: %d post-cleanup requests, need >= %d",
+			h.Attempts, MinRecoverySamples))
+	}
+	if h.Ratio > sc.AbortMax {
+		return fail(fmt.Sprintf("service not healthy after cleanup: %.0f%% of %d post-cleanup requests failed (max %.0f%%)",
+			h.Ratio*100, h.Attempts, sc.AbortMax*100))
+	}
+	if sc.RecoveryDeadline > 0 {
+		elapsed := time.Since(cleanupDone)
+		if elapsed > time.Duration(sc.RecoveryDeadline)*time.Second {
+			return fail(fmt.Sprintf("recovery exceeded deadline: %s > %ds",
+				elapsed.Round(time.Millisecond), sc.RecoveryDeadline))
+		}
+	}
+	if sc.AssertsDeclared {
+		if reason, oerr := r.runOracle(ctx, runID, sc); oerr != nil {
+			return "", oerr // journal/persistence failure: state unknown
+		} else if reason != "" {
+			return fail(reason)
+		}
+	}
+	if err := j.AppendEvent(runID, "recovery-ok",
+		fmt.Sprintf(`{"attempts":%d,"failure_ratio":%.6f}`, h.Attempts, h.Ratio)); err != nil {
+		return "", fmt.Errorf("journal: %w", err)
+	}
+	if err := j.Transition(runID, StVerifying, StPassed, "resolved", "{}", ""); err != nil {
+		return "", fmt.Errorf("journal: %w", err)
+	}
 	return StPassed, nil
 }
 
+// runOracle evaluates the declared assertions against the fault lab's
+// inventory ledger using this run's attempts. It returns a failure reason
+// (empty when clean) or an error for persistence problems. Missing ledger
+// configuration with assertions declared fails closed.
+func (r *Runner) runOracle(ctx context.Context, runID string, sc Scenario) (string, error) {
+	j := r.Journal
+	if r.Ledger == nil {
+		return "assertions declared but no ledger configured (--pg-dsn): oracle cannot run", nil
+	}
+	findings, oerr := Check(ctx, r.Ledger, r.sku(), r.oracleOps(runID))
+	payload, err := json.Marshal(map[string]any{
+		"clean":      oerr == nil && findings.Clean(),
+		"violations": findings.Violations,
+		"info":       findings.Info,
+		"sku":        r.sku(),
+		"scenario":   sc.Name,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal oracle findings: %w", err)
+	}
+	if err := j.AppendEvent(runID, "oracle", string(payload)); err != nil {
+		return "", fmt.Errorf("journal oracle: %w", err)
+	}
+	if r.OutDir != "" {
+		if err := os.WriteFile(filepath.Join(r.OutDir, "oracle.json"), append(payload, '\n'), 0o644); err != nil {
+			return "", fmt.Errorf("write oracle.json: %w", err)
+		}
+	}
+	if oerr != nil {
+		return "oracle: " + oerr.Error(), nil
+	}
+	if !findings.Clean() {
+		return "oracle violations: " + strings.Join(findings.Violations, "; "), nil
+	}
+	return "", nil
+}
+
+// oracleOps converts this run's recorded attempts (in phase order) to
+// ledger operations for the correctness check.
+func (r *Runner) oracleOps(runID string) []OpRecord {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var ops []OpRecord
+	for _, phase := range []string{"baseline", "fault", "recovery"} {
+		for _, a := range r.attempts[runID+"|"+phase] {
+			ops = append(ops, OpRecord{
+				OpID: a.OpID, Key: a.Key, SKU: a.SKU, Qty: a.Qty,
+				Acked: a.Code >= 200 && a.Code < 300, ResvID: a.ResvID,
+			})
+		}
+	}
+	return ops
+}
+
 // verify is the clean-path VERIFYING step after full observation.
-func (r *Runner) verify(ctx context.Context, runID, cur string) (string, error) {
-	return r.toCleaning(ctx, runID, cur, "observe-complete")
+func (r *Runner) verify(ctx context.Context, runID string, sc Scenario, cur string) (string, error) {
+	return r.toCleaning(ctx, runID, sc, cur, "observe-complete")
 }
 
 // Reconcile recovers unfinished runs (F2): clear recorded faults, verify

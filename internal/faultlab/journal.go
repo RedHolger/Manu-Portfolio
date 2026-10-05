@@ -195,6 +195,33 @@ func (j *Journal) Transition(runID, from, to, eventKind, payload, errMsg string)
 	return tx.Commit()
 }
 
+// AppendEvent records an event WITHOUT a state change, so phase outcomes
+// (cleanup status, recovery health, workload validity, oracle verdict) stay
+// individually visible instead of being folded into the terminal reason.
+// A failure here is returned: evidence writes are part of the experiment.
+func (j *Journal) AppendEvent(runID, kind, payload string) error {
+	if payload == "" {
+		payload = "{}"
+	}
+	tx, err := j.db.Begin()
+	if err != nil {
+		return err
+	}
+	var seq int
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(sequence),-1)+1 FROM events WHERE run_id=?`,
+		runID).Scan(&seq); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO events(run_id, sequence, timestamp, kind, payload_json)
+		 VALUES(?,?,?,?,?)`, runID, seq, nowUTC(), kind, payload); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
 // GetRun reads one run.
 func (j *Journal) GetRun(runID string) (Run, error) {
 	var r Run
