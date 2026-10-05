@@ -1,7 +1,7 @@
 {
-  "commit": "ba51daa9777c38eb63f618e0f1c65ee7b6595cae",
-  "commit_short": "ba51daa9777c",
-  "commit_time": "2026-10-05T07:30:38+01:00",
+  "commit": "c87ae22792f6864055c16fa2329d775bb9ded901",
+  "commit_short": "c87ae22792f6",
+  "commit_time": "2026-10-05T07:41:04+01:00",
   "go_version": "go1.27.1",
   "generator": "scripts/build-demo-site.sh"
 }

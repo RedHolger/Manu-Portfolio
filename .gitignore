@@ -7,3 +7,5 @@ __pycache__/
 # natively; these regenerate on edit and carry no project content).
 ._*
 .DS_Store
+# Vercel local link config (per-machine project link, no credentials).
+.vercel/
