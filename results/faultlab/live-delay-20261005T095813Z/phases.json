@@ -1,0 +1,61 @@
+{
+  "phases": [
+    {
+      "phase": "baseline",
+      "summary": {
+        "Planned": 1500,
+        "Offered": 1500,
+        "Launched": 1500,
+        "Completed": 1500,
+        "Dropped": 0,
+        "Missed": 0,
+        "Outstanding": 0,
+        "Cancelled": 0,
+        "SchedLagP50Ms": 1.05,
+        "SchedLagP99Ms": 1.692,
+        "OfferedRPS": 50.03156700026909,
+        "AchievedRPS": 50.02556660801433,
+        "ScheduleSeconds": 29.98107175,
+        "DrainSeconds": 0.0035961249999978406,
+        "ElapsedSeconds": 29.984667875,
+        "LatP50Ms": 3.911,
+        "LatP95Ms": 6.172,
+        "LatP99Ms": 9.432,
+        "TransportErrors": 0,
+        "Successful": 1500,
+        "Valid": true,
+        "Truncated": false,
+        "DrainTimedOut": false
+      }
+    },
+    {
+      "phase": "fault",
+      "summary": {
+        "Planned": 3000,
+        "Offered": 3000,
+        "Launched": 3000,
+        "Completed": 3000,
+        "Dropped": 0,
+        "Missed": 0,
+        "Outstanding": 0,
+        "Cancelled": 0,
+        "SchedLagP50Ms": 1.05,
+        "SchedLagP99Ms": 1.696,
+        "OfferedRPS": 50.01587333598996,
+        "AchievedRPS": 49.61500403754234,
+        "ScheduleSeconds": 59.980958042,
+        "DrainSeconds": 0.48462204200000514,
+        "ElapsedSeconds": 60.465580084,
+        "LatP50Ms": 10.271,
+        "LatP95Ms": 508.016,
+        "LatP99Ms": 513.172,
+        "TransportErrors": 0,
+        "Successful": 3000,
+        "Valid": true,
+        "Truncated": false,
+        "DrainTimedOut": false
+      }
+    }
+  ],
+  "run": "upstream-delay-1791194293"
+}

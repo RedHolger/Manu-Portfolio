@@ -66,6 +66,10 @@ per-rep PG reseed + gateway/prometheus restart, kind `sre-lab`.
   slow 7 FAIL (100% slow_or_bad, 0 errors — pure slow signal),
   zero INCONCLUSIVE, no STOP, no failures.
 - Totals: healthy **10/10** ✓, error **10/10** ✓, slow **10/10** ✓.
+- Stricter-gap confirmation (2026-10-05, not counted above):
+  `results/budgetguard/kind-fullwindow-20261005T100739Z/healthy-2001`
+  PASS `within_gate` over the 300s window with the inter-sample gap rule
+  ((worst+1)*step): real 5s-scrape data shows zero empty 15s buckets.
 - Legacy groups A (native 15/15) and B (kind short-window) below are
   retained as preliminary short-window evidence only and contribute
   NOTHING to the v1 counts.

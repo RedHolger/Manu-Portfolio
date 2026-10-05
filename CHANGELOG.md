@@ -5,8 +5,17 @@ BudgetGuard coverage gap measured between consecutive present buckets
 FaultLab recovery decoupled from the abort threshold (independent 5%
 `MaxRecoveryFailureRatio` + ≥3 successful 2xx requests, so `AbortMax=1.0`
 and all-4xx recoveries can no longer pass). Regression tests fail on the
-prior code and pass on the fix; `go test ./...` green; no live lab rerun
-(docker down), so IMPLEMENTED_UNVERIFIED against the lab.
+prior code and pass on the fix; `go test ./...` green.
+Live lab (kind-sre-lab, docker up): FaultLab short delay run PASSED
+(`results/faultlab/live-short-20261005T100425Z`, recovery-health
+400 attempts / 400 success / 0 failures → `recovery-ok`); BudgetGuard
+healthy 330s rep PASS `within_gate`
+(`results/budgetguard/kind-fullwindow-20261005T100739Z/healthy-2001`).
+Full-length (30/60/60) delay runs reach cleanup but fail there twice on a
+pre-existing, unrelated flake — gateway admin DELETE returns EOF after
+~100s idle through the kubectl forward (manual PUT/DELETE healthy, short
+run passes); bundles preserved as `live-delay-*` CLEANUP_FAILED. Full
+9-class suite not rerun.
 
 # Unreleased source fixes — 2026-10-03
 

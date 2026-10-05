@@ -1,0 +1,89 @@
+{
+  "phases": [
+    {
+      "phase": "baseline",
+      "summary": {
+        "Planned": 250,
+        "Offered": 250,
+        "Launched": 250,
+        "Completed": 250,
+        "Dropped": 0,
+        "Missed": 0,
+        "Outstanding": 0,
+        "Cancelled": 0,
+        "SchedLagP50Ms": 1.043,
+        "SchedLagP99Ms": 1.275,
+        "OfferedRPS": 50.19071677352988,
+        "AchievedRPS": 50.13869071816505,
+        "ScheduleSeconds": 4.981000792,
+        "DrainSeconds": 0.005168499999999909,
+        "ElapsedSeconds": 4.986169292,
+        "LatP50Ms": 4.364,
+        "LatP95Ms": 6.048,
+        "LatP99Ms": 7.754,
+        "TransportErrors": 0,
+        "Successful": 250,
+        "Valid": true,
+        "Truncated": false,
+        "DrainTimedOut": false
+      }
+    },
+    {
+      "phase": "fault",
+      "summary": {
+        "Planned": 600,
+        "Offered": 600,
+        "Launched": 600,
+        "Completed": 600,
+        "Dropped": 0,
+        "Missed": 0,
+        "Outstanding": 0,
+        "Cancelled": 0,
+        "SchedLagP50Ms": 1.042,
+        "SchedLagP99Ms": 1.552,
+        "OfferedRPS": 50.08038858903963,
+        "AchievedRPS": 48.1312999413963,
+        "ScheduleSeconds": 11.980737708,
+        "DrainSeconds": 0.4851628750000003,
+        "ElapsedSeconds": 12.465900583,
+        "LatP50Ms": 502.158,
+        "LatP95Ms": 509.272,
+        "LatP99Ms": 514.676,
+        "TransportErrors": 0,
+        "Successful": 600,
+        "Valid": true,
+        "Truncated": false,
+        "DrainTimedOut": false
+      }
+    },
+    {
+      "phase": "recovery",
+      "summary": {
+        "Planned": 400,
+        "Offered": 400,
+        "Launched": 400,
+        "Completed": 400,
+        "Dropped": 0,
+        "Missed": 0,
+        "Outstanding": 0,
+        "Cancelled": 0,
+        "SchedLagP50Ms": 1.05,
+        "SchedLagP99Ms": 1.207,
+        "OfferedRPS": 50.1197902142206,
+        "AchievedRPS": 50.097882388599906,
+        "ScheduleSeconds": 7.980879375,
+        "DrainSeconds": 0.0034900420000001375,
+        "ElapsedSeconds": 7.984369417,
+        "LatP50Ms": 4.472,
+        "LatP95Ms": 7.387,
+        "LatP99Ms": 9.742,
+        "TransportErrors": 0,
+        "Successful": 400,
+        "Valid": true,
+        "Truncated": false,
+        "DrainTimedOut": false
+      }
+    }
+  ],
+  "run": "live-short-1791194665"
+}
