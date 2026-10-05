@@ -69,10 +69,16 @@
 </footer>
 <script>
 fetch('./BUILD.json').then(function (r) { return r.json(); }).then(function (b) {
-  document.getElementById('build').textContent =
-    'build ' + b.commit_short + ' · committed ' + b.commit_time + ' · ' + b.go_version;
-  document.getElementById('footer-commit').textContent =
-    'Generated site data commit: ' + b.commit;
+  var deploy = b.deploy_commit ? b.deploy_commit.slice(0, 12) : null;
+  document.getElementById('build').textContent = deploy
+    ? 'deployed ' + deploy + ' · site data ' + b.commit_short +
+      ' · committed ' + b.commit_time + ' · ' + b.go_version
+    : 'site data ' + b.commit_short + ' · committed ' + b.commit_time +
+      ' · ' + b.go_version;
+  document.getElementById('footer-commit').textContent = deploy
+    ? 'Deployed commit: ' + b.deploy_commit +
+      ' · generated site data commit: ' + b.commit
+    : 'Generated site data commit: ' + b.commit;
 }).catch(function (e) {
   document.getElementById('build').textContent = 'build info unavailable: ' + e;
 });

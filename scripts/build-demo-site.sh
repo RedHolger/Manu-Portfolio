@@ -6,10 +6,21 @@
 #
 #   scripts/build-demo-site.sh            # write site/ (and BUILD.json)
 #   scripts/build-demo-site.sh --check    # regenerate elsewhere, fail on drift
+#   scripts/build-demo-site.sh --stamp-deploy <sha>
+#                                          # as above, and record the commit that
+#                                          # is about to be deployed (used right
+#                                          # before `vercel deploy`, then reverted)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MODE="${1:-build}"
+DEPLOY_SHA=
+if [ "$MODE" = "--stamp-deploy" ]; then
+  DEPLOY_SHA="$(git rev-parse --verify "${2:?usage: --stamp-deploy <commit>}"^{commit})"
+elif [ "$MODE" != "--check" ] && [ "$MODE" != "build" ]; then
+  echo "build-demo-site: unknown mode $MODE" >&2
+  exit 2
+fi
 SITE_SRC=site
 FIXTURE_END=2026-10-03T05:00:00Z
 COMMIT="$(git rev-parse HEAD)"
@@ -172,6 +183,18 @@ cat > "$OUT/BUILD.json" <<JSON
   "generator": "scripts/build-demo-site.sh"
 }
 JSON
+
+if [ -n "$DEPLOY_SHA" ]; then
+  python3 - "$OUT/BUILD.json" "$DEPLOY_SHA" <<'PY'
+import json, sys
+path, sha = sys.argv[1], sys.argv[2]
+data = json.load(open(path))
+data["deploy_commit"] = sha
+data["deploy_commit_short"] = sha[:12]
+open(path, "w").write(json.dumps(data, indent=2) + "\n")
+PY
+  echo "build-demo-site: stamped deploy commit ${DEPLOY_SHA:0:12}"
+fi
 
 # AppleDouble sidecars (exFAT) must not ship with the site.
 find "$OUT" -name '._*' -delete
