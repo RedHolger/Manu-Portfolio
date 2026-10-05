@@ -9,3 +9,5 @@ __pycache__/
 .DS_Store
 # Vercel local link config (per-machine project link, no credentials).
 .vercel/
+# Release archives built by hand (git archive + sha256); never commit them.
+dist/
