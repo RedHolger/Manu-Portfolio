@@ -87,16 +87,23 @@ jobs:
       - name: regenerate and compare
         run: |
           set -uo pipefail
-          if ./scripts/build-demo-site.sh --check > /tmp/check.log 2>&1; then
+          rc=0
+          ./scripts/build-demo-site.sh --check > /tmp/check.log 2>&1 || rc=$?
+          if [ "$rc" -eq 0 ]; then
             tail -2 /tmp/check.log
             exit 0
           fi
           {
             echo '### demo site data drift'
+            echo "exit code: $rc"
             echo '```'
             cat /tmp/check.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::site/*/data differs from a fresh generation (details in the step summary)"
+          if [ "$rc" -eq 126 ] || grep -qi 'permission denied' /tmp/check.log; then
+            echo "::error::cannot execute scripts/build-demo-site.sh (tracked mode must be 100755)"
+          else
+            echo "::error::site/*/data differs from a fresh generation (details in the step summary)"
+          fi
           cat /tmp/check.log
           exit 1
