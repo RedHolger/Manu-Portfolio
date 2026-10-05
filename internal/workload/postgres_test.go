@@ -3,7 +3,7 @@
 // Postgres integration: same acceptance gates against real PostgreSQL
 // (read-committed, ON CONFLICT, crash-safe commit). Requires a live server:
 //
-//	TEST_POSTGRES_DSN=postgres://lab:lab@127.0.0.1:5433/lab?sslmode=disable
+//	TEST_POSTGRES_DSN=postgres://<user>:<password>@127.0.0.1:5433/<db>?sslmode=disable
 //	go test -tags integration ./internal/workload/ -run TestPostgres -v
 //
 // The DSN database must have migrations/postgres/001_init.sql applied.
