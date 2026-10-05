@@ -38,7 +38,6 @@ echo "build-demo-site: budgetguard replay ×4 (fixtures)"
 MANIFEST="$OUT/budgetguard/data/manifest.json"
 {
   printf '{\n  "generated_by": "scripts/build-demo-site.sh",\n'
-  printf '  "commit": "%s",\n' "$COMMIT"
   printf '  "window_end": "%s",\n' "$FIXTURE_END"
   printf '  "runs": [\n'
   first=1
@@ -64,9 +63,9 @@ MANIFEST="$OUT/budgetguard/data/manifest.json"
 echo "build-demo-site: faultlab journals (read-only SQL dump)"
 mkdir -p "$OUT/slos"
 cp configs/slos/reservations.yaml "$OUT/slos/reservations.yaml"
-python3 - "$OUT" "$COMMIT" <<'PY'
+python3 - "$OUT" <<'PY'
 import json, sqlite3, sys, os, pathlib, shutil, tempfile
-out, commit = sys.argv[1], sys.argv[2]
+out = sys.argv[1]
 
 def open_readonly(db_path):
     """Open a COPY: SQLite would otherwise drop -wal/-shm sidecars next to
@@ -95,7 +94,6 @@ def dump(db_path, *, source, note):
     close(con, copy_path)
     return {
         "generated_by": "scripts/build-demo-site.sh",
-        "commit": commit,
         "source": source,
         "recorded_evidence": True,
         "note": note,
@@ -147,7 +145,6 @@ for e in events:
 r3_dir = "results/recoverops/r3-live-20261003T151252Z"
 payload = {
     "generated_by": "scripts/build-demo-site.sh",
-    "commit": commit,
     "source": r3_dir,
     "recorded_evidence": True,
     "gate": "R3 ACCEPTED (see RELEASE_STATUS.md)",
@@ -180,10 +177,11 @@ JSON
 find "$OUT" -name '._*' -delete
 
 if [ "$MODE" = "--check" ]; then
+  # BUILD.json carries the generation-time commit on purpose: it is stamped,
+  # not compared, so a commit after stamping cannot create false drift.
   if ! diff -r "$SITE_SRC/budgetguard/data" "$OUT/budgetguard/data" \
      || ! diff -r "$SITE_SRC/faultlab/data" "$OUT/faultlab/data" \
-     || ! diff -r "$SITE_SRC/recoverops/data" "$OUT/recoverops/data" \
-     || ! diff "$SITE_SRC/BUILD.json" "$OUT/BUILD.json"; then
+     || ! diff -r "$SITE_SRC/recoverops/data" "$OUT/recoverops/data"; then
     echo "build-demo-site: site data is out of date — run scripts/build-demo-site.sh" >&2
     exit 1
   fi

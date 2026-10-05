@@ -1,6 +1,5 @@
 {
   "generated_by": "scripts/build-demo-site.sh",
-  "commit": "ba51daa9777c38eb63f618e0f1c65ee7b6595cae",
   "window_end": "2026-10-03T05:00:00Z",
   "runs": [
     {"fixture": "healthy", "decision": "PASS", "exit_code": 0, "reasons": ["within_gate"]},
