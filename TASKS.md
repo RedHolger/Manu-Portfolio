@@ -732,3 +732,38 @@ Status reflects executed tests and measured outcomes only.
   No live run (docker daemon down); no `results/` bundle produced.
 - Next: secret audit, `publish-demos` branch, static demo site (3 routes),
   CI, deploy/verify, `PUBLIC_LINKS.md` + CV snippets.
+
+## Session 2026-10-05 (b) — publish-demos: site, CI, deploy, verify
+
+- Branch `publish-demos` from `recoverops-dev` @ `ba51daa`; baselines
+  `0fe8b77`/`cad2f7e` untouched, no `results/` bundle deleted or rewritten.
+- **G-1 re-scan** of `site/` + `.github/`: no token/key/DSN patterns.
+- **Static site** committed `c87ae22`: `site/` (landing + `/budgetguard/`,
+  `/faultlab/`, `/recoverops/` + `/slos/`), vanilla JS, zero external
+  requests, every figure labelled recorded/simulated.
+- **Generator**: `scripts/build-demo-site.sh` (BudgetGuard replay ×4 from
+  `tests/fixtures/releases`, read-only SQLite dumps of committed
+  `results/faultlab/{demo2-expire,demo6-abort}/j.db` and
+  `results/recoverops/r3-live-*/r3.db`), `--check` drift gate, `--stamp-deploy`.
+  Read-only access copies the DB first so no `-wal`/`-shm` sidecars land in
+  evidence dirs (earlier side-effect files were removed). Data payloads are
+  commit-independent; `BUILD.json` alone is stamped.
+  Makefile: `make site`, `make site-check`.
+- **CI** `.github/workflows/ci.yml` (jobs: go, rules, scripts, site) —
+  IMPLEMENTED_UNVERIFIED, no GitHub repository exists to run it.
+- **G-4/G-5 ACCEPTED**: `https://sre-portfolio-demos.vercel.app/` (Vercel
+  hobby). 13 endpoints 200 anonymous; DOM shows 3/4/10/5 rendered cards;
+  0 console issues; screenshots + `git-tree-match.txt` in
+  `results/deploy-20261005T064754Z/`; live `deploy_commit` = `5bf4728`
+  (= commit deployed) and reproduces byte-for-byte.
+- **G-6 ACCEPTED**: `PUBLIC_LINKS.md` (each URL with last-fetched date,
+  GitHub URL explicitly NOT YET VERIFIED) + `CV_SNIPPETS.tex`.
+- Deploy quirks recorded: Vercel `Vercel Authentication` wall disabled
+  (`ssoProtection: null`); two deploys blocked for "commit author doesn't
+  have permission" → `scripts/deploy-vercel.sh` uploads from a `.git`-free
+  copy and verifies `deploy_commit` afterwards.
+- Blockers unchanged: GitHub repo not created (push + Actions pending);
+  docker down → no live lab run.
+- Next: create repo → `git ls-remote origin HEAD` → `git push -u origin
+  publish-demos` → watch Actions → attach Pages if wanted → screenshots
+  already captured; then merge per release process.

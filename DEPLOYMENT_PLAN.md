@@ -66,25 +66,29 @@ unchanged; this plan covers publication and demos only).
 
 ## Acceptance gates
 
-| Gate | Requirement |
-|---|---|
-| G-0 findings | Findings A–E either fixed with regression tests that run green, or documented as unresolved with reasons (no false completion) |
-| G-1 hygiene | Secret scan of tracked files + history before first push; no credentials in tree or history |
-| G-2 pages | `docs/projects/{budgetguard,faultlab,recoverops}.md` + rewritten root README exist and match reality |
-| G-3 build | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l`, `make test-rules`, `make test-scripts` green locally |
-| G-4 deploy | Site deployed to a real, no-charge URL; three routes load without auth |
-| G-5 verify | Each URL opened, refreshed, exercised, console/network checked, screenshots captured, build commit displayed matches deployed commit |
-| G-6 outputs | `PUBLIC_LINKS.md` + three LaTeX CV snippets using only verified URLs |
+| Gate | Requirement | Status (2026-10-05) |
+|---|---|---|
+| G-0 findings | Findings A–E either fixed with regression tests that run green, or documented as unresolved with reasons (no false completion) | ACCEPTED at `cb4da08` |
+| G-1 hygiene | Secret scan of tracked files + history before first push; no credentials in tree or history | ACCEPTED at `9bddb19`; re-scanned at `865b031` (site + CI clean) |
+| G-2 pages | `docs/projects/{budgetguard,faultlab,recoverops}.md` + rewritten root README exist and match reality | ACCEPTED at `ba51daa` |
+| G-3 build | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l`, `make test-rules`, `make test-scripts` green locally | ACCEPTED at `cb4da08` |
+| G-4 deploy | Site deployed to a real, no-charge URL; three routes load without auth | ACCEPTED — `https://sre-portfolio-demos.vercel.app/`, 13 endpoints 200 without auth |
+| G-5 verify | Each URL opened, refreshed, exercised, console/network checked, screenshots captured, build commit displayed matches deployed commit | ACCEPTED — `results/deploy-20261005T064754Z/` (DOM, screenshots, 0 console issues, `deploy_commit` = `5bf4728`) |
+| G-6 outputs | `PUBLIC_LINKS.md` + three LaTeX CV snippets using only verified URLs | ACCEPTED — `PUBLIC_LINKS.md`, `CV_SNIPPETS.tex` |
 
 ## Current blockers
 
-1. GitHub repository creation / Pages / Actions — needs a credential
-   (exact actions listed in the final report). Demos and docs can be
-   completed and locally verified without it; source links stay absent
-   until the repository exists.
+1. GitHub repository creation / Pages / Actions — still pending: the user
+   creates `RedHolger/sre-portfolio` in the browser (public, empty), then
+   `GIT_SSH_COMMAND="ssh -o BatchMode=yes" git ls-remote origin HEAD` must
+   succeed before any push. `.github/workflows/ci.yml` is committed but has
+   never run; it is IMPLEMENTED_UNVERIFIED until Actions goes green.
+2. Live lab runs (Docker/kind down) — FaultLab recovery-health and phase
+   behaviour beyond the unit/regression tests stay IMPLEMENTED_UNVERIFIED.
 
 ## Exact next command
 
 ```sh
-git switch -c publish-demos        # from 3f11c8f, after the findings work
+GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=8" git ls-remote origin HEAD
+# if it prints a SHA: git push -u origin publish-demos
 ```

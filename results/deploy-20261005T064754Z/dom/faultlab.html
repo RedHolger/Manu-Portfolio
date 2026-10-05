@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FaultLab — journal excerpts</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header>
+  <p><a href="../">← all demos</a></p>
+  <h1>FaultLab</h1>
+  <p>Bounded fault experiments against the lab gateway, journaled so a run can
+     be audited afterwards: intent before mutation, cleanup on a fresh bounded
+     context, TTL expiry enforced by the gateway itself.</p>
+  <p class="label"><span class="tag recorded">recorded live run</span>
+     Read-only dumps of the SQLite journals committed under
+     <code>results/faultlab/</code>. Timestamps and states are exactly as the
+     runner wrote them on the dates shown — nothing is replayed or edited.</p>
+  <p class="label" id="build">site data generated from commit 5bf472897499 (2026-10-05T07:51:28+01:00)</p>
+</header>
+<main>
+  <div id="demos"><section class="card"><h3>Aborted run (FAILED)</h3><p class="muted">Live kind-sre-lab run: connection failure above the abort threshold; the runner cleaned up and recorded FAILED.</p><table><tr><th>run</th><th>state</th><th>started (UTC)</th><th>seed</th><th>error</th></tr><tr><td>abort-fail-1790613856</td><td><span class="badge fail">FAILED</span></td><td>2026-09-28T16:44:16.44562Z</td><td>14</td><td class="muted">abort: failure ratio above 50%</td></tr></table><h3>journal events</h3><ol class="timeline"><li><span class="kind">0 · created</span><span class="muted">  2026-09-28T16:44:16.445635Z</span></li><li><span class="kind">1 · preflight</span><span class="muted">  2026-09-28T16:44:16.559492Z</span></li><li><span class="kind">2 · baseline-start</span><span class="muted">  2026-09-28T16:44:16.570699Z</span></li><li><span class="kind">3 · inject</span><span class="muted">  2026-09-28T16:44:26.578143Z</span><pre>{"fault":"abort-fail-1790613856-f1"}</pre></li><li><span class="kind">4 · observe-start</span><span class="muted">  2026-09-28T16:44:26.581563Z</span></li><li><span class="kind">5 · cleanup</span><span class="muted">  2026-09-28T16:44:37.589907Z</span><pre>{"reason":"abort: failure ratio above 50%"}</pre></li><li><span class="kind">6 · verify</span><span class="muted">  2026-09-28T16:44:37.597535Z</span></li><li><span class="kind">7 · resolved</span><span class="muted">  2026-09-28T16:44:37.597801Z</span></li></ol><h3>faults</h3><table><tr><th>id</th><th>kind</th><th>target</th><th>applied</th><th>cleared</th><th>expires</th></tr><tr><td>abort-fail-1790613856-f1</td><td>conn_fail</td><td><code>{"slot":"stable","fraction":1}</code></td><td>2026-09-28T16:44:26.581403Z</td><td>2026-09-28T16:44:37.594377Z</td><td>2026-09-28T16:44:56.577662Z</td></tr></table><p><a href="./data/aborted.json">raw journal dump</a></p></section><section class="card"><h3>Recovered run (PASSED)</h3><p class="muted">Live kind-sre-lab run: 400ms/50% delay for 20s, PASSED with zero live faults after cleanup.</p><table><tr><th>run</th><th>state</th><th>started (UTC)</th><th>seed</th><th>error</th></tr><tr><td>short-delay-1790613570</td><td><span class="badge pass">PASSED</span></td><td>2026-09-28T16:39:30.343429Z</td><td>11</td><td class="muted">—</td></tr></table><h3>journal events</h3><ol class="timeline"><li><span class="kind">0 · created</span><span class="muted">  2026-09-28T16:39:30.34344Z</span></li><li><span class="kind">1 · preflight</span><span class="muted">  2026-09-28T16:39:30.439818Z</span></li><li><span class="kind">2 · baseline-start</span><span class="muted">  2026-09-28T16:39:30.452271Z</span></li><li><span class="kind">3 · inject</span><span class="muted">  2026-09-28T16:39:40.45748Z</span><pre>{"fault":"short-delay-1790613570-f1"}</pre></li><li><span class="kind">4 · observe-start</span><span class="muted">  2026-09-28T16:39:40.464044Z</span></li><li><span class="kind">5 · cleanup</span><span class="muted">  2026-09-28T16:40:00.878036Z</span><pre>{"reason":"observe-complete"}</pre></li><li><span class="kind">6 · verify</span><span class="muted">  2026-09-28T16:40:00.882957Z</span></li><li><span class="kind">7 · resolved</span><span class="muted">  2026-09-28T16:40:00.883179Z</span></li></ol><h3>faults</h3><table><tr><th>id</th><th>kind</th><th>target</th><th>applied</th><th>cleared</th><th>expires</th></tr><tr><td>short-delay-1790613570-f1</td><td>gateway_delay</td><td><code>{"slot":"stable","fraction":0.5}</code></td><td>2026-09-28T16:39:40.463694Z</td><td>2026-09-28T16:40:00.881085Z</td><td>2026-09-28T16:40:10.456863Z</td></tr></table><p><a href="./data/passed.json">raw journal dump</a></p></section></div>
+
+  <h2>What each state means</h2>
+  <table>
+    <thead><tr><th>state</th><th>meaning</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge">PREFLIGHT</span></td><td>context checked, injector reachable, no mutation yet</td></tr>
+      <tr><td><span class="badge">BASELINE</span> → <span class="badge">OBSERVING</span></td><td>unfaulted load, then fault applied and observed</td></tr>
+      <tr><td><span class="badge">CLEANING</span></td><td>recorded faults cleared, zero live faults verified</td></tr>
+      <tr><td><span class="badge">VERIFYING</span></td><td>post-cleanup health, workload validity, declared assertions</td></tr>
+      <tr><td><span class="badge pass">PASSED</span> / <span class="badge fail">FAILED</span></td><td>terminal outcomes</td></tr>
+      <tr><td><span class="badge fail">CLEANUP_FAILED</span></td><td>restoration could not be verified — never a success</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Schema note</h2>
+  <p class="muted">The journals above were recorded on 2026-09-28. Since the
+     2026-10-05 correctness work the runner additionally journals
+     <code>cleanup-ok</code>, <code>recovery-health</code>,
+     <code>recovery-failed</code>, <code>recovery-skipped</code>,
+     <code>phase-load</code> and <code>oracle</code>, persists every workload
+     phase to <code>phases.json</code>, and refuses to report PASSED unless
+     the post-cleanup recovery phase met its health gate. Those paths are
+     unit-tested (<code>-race</code> green); a live rerun with them is still
+     pending, so no new live claim is made here.</p>
+</main>
+<footer><p><a href="../">sre-portfolio demos</a></p></footer>
+<script>
+function add(parent, tag, cls, value) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (value !== undefined) n.textContent = String(value);
+  parent.appendChild(n);
+  return n;
+}
+function badgeFor(state) {
+  if (state === 'PASSED') return 'badge pass';
+  if (state === 'FAILED' || state === 'CLEANUP_FAILED') return 'badge fail';
+  return 'badge';
+}
+
+fetch('../BUILD.json').then(function (r) { return r.json(); }).then(function (b) {
+  document.getElementById('build').textContent =
+    'site data generated from commit ' + b.commit_short + ' (' + b.commit_time + ')';
+});
+
+var demos = [
+  { file: 'passed', title: 'Recovered run (PASSED)' },
+  { file: 'aborted', title: 'Aborted run (FAILED)' }
+];
+
+demos.forEach(function (demo) {
+  fetch('./data/' + demo.file + '.json')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var card = add(document.getElementById('demos'), 'section', 'card');
+      add(card, 'h3', '', demo.title);
+      add(card, 'p', 'muted', d.note);
+
+      d.runs.forEach(function (run) {
+        var t = add(card, 'table');
+        var head = add(t, 'tr');
+        ['run', 'state', 'started (UTC)', 'seed', 'error'].forEach(function (h) { add(head, 'th', '', h); });
+        var tr = add(t, 'tr');
+        add(tr, 'td', '', run.id);
+        var td = add(tr, 'td');
+        add(td, 'span', badgeFor(run.state), run.state);
+        add(tr, 'td', '', run.started_at);
+        add(tr, 'td', '', run.seed);
+        add(tr, 'td', 'muted', run.error || '—');
+      });
+
+      add(card, 'h3', '', 'journal events');
+      var ol = add(card, 'ol', 'timeline');
+      d.events.forEach(function (e) {
+        var li = add(ol, 'li');
+        add(li, 'span', 'kind', e.sequence + ' · ' + e.kind);
+        add(li, 'span', 'muted', '  ' + e.timestamp);
+        if (e.payload_json && e.payload_json !== '{}') {
+          add(li, 'pre', '', e.payload_json);
+        }
+      });
+
+      if (d.faults.length) {
+        add(card, 'h3', '', 'faults');
+        var t2 = add(card, 'table');
+        var head2 = add(t2, 'tr');
+        ['id', 'kind', 'target', 'applied', 'cleared', 'expires'].forEach(function (h) { add(head2, 'th', '', h); });
+        d.faults.forEach(function (f) {
+          var tr2 = add(t2, 'tr');
+          add(tr2, 'td', '', f.id);
+          add(tr2, 'td', '', f.kind);
+          var td2 = add(tr2, 'td');
+          add(td2, 'code', '', f.target_json);
+          add(tr2, 'td', '', f.applied_at || '—');
+          add(tr2, 'td', '', f.cleared_at || '—');
+          add(tr2, 'td', '', f.expires_at);
+        });
+      }
+
+      var link = add(card, 'p');
+      var a = add(link, 'a', '', 'raw journal dump');
+      a.href = './data/' + demo.file + '.json';
+    })
+    .catch(function (e) {
+      add(document.getElementById('demos'), 'p', 'error', demo.file + ': load failed: ' + e);
+    });
+});
+</script>
+
+
+</body></html>

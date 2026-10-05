@@ -1,0 +1,41 @@
+% CV_SNIPPETS.tex — three copy-paste CV entries for the sre-portfolio demos.
+%
+% Requirements: \usepackage{hyperref} in the preamble.
+% Every URL in this file was fetched anonymously on 2026-10-05 and returned 200
+% (evidence: results/deploy-20261005T064754Z/); see PUBLIC_LINKS.md.
+% The GitHub link is deliberately absent: the repository has not been created
+% yet, so its URL is unverified. Add it only after `git ls-remote` succeeds.
+%
+% Each snippet states exactly what is live, what is recorded, and what is
+% unverified — the same wording the deployed pages use.
+
+\begin{itemize}
+
+  \item \textbf{BudgetGuard} — SLO compiler and canary release gate (Go,
+    Prometheus). Compiles a written SLO into alert rules and turns measured
+    traffic into PASS / FAIL / \textbf{INCONCLUSIVE} decisions with a
+    telemetry-coverage gate (exit 0/2/3).
+    Demo (recorded CLI runs, re-executed by the site generator):
+    \href{https://sre-portfolio-demos.vercel.app/budgetguard/}{sre-portfolio-demos.vercel.app/budgetguard/}
+
+  \item \textbf{FaultLab} — journaled chaos experiments (Go, SQLite, kind lab).
+    Bounded delay / connection / dependency / pod-delete experiments with an
+    auditable journal (intent $\rightarrow$ apply $\rightarrow$ observe
+    $\rightarrow$ cleanup $\rightarrow$ recovery health), a monotonic schedule
+    and a full assertion oracle.
+    Demo (read-only dumps of recorded live runs):
+    \href{https://sre-portfolio-demos.vercel.app/faultlab/}{sre-portfolio-demos.vercel.app/faultlab/}
+
+  \item \textbf{RecoverOps} — evidence-bound automated recovery (Go, Kubernetes,
+    admission control). Accepts alert webhooks, proposes a policy-checked single
+    remediation, executes it as a UID-pinned template-only patch and verifies
+    recovery from measured traffic before RESOLVED; the fault-injection plane
+    (R4) is implemented but unverified.
+    Demo (recorded R3 incident from the lab):
+    \href{https://sre-portfolio-demos.vercel.app/recoverops/}{sre-portfolio-demos.vercel.app/recoverops/}
+
+\end{itemize}
+
+% Optional one-liner for a summary section:
+%   Three SRE services (Go, Prometheus, Kubernetes, PostgreSQL) with published
+%   demos: \url{https://sre-portfolio-demos.vercel.app/}

@@ -70,3 +70,14 @@ claims acceptance before RELEASE_STATUS.md says ACCEPTED.
   reconciler, cooldown/budget refusals, and persisted verification with
   server-measured Prometheus windows. The 10-pair matrix and portfolio
   integration demo remain incomplete.
+
+# Unreleased demo site + CI — 2026-10-05
+
+Static demo site (`site/`, three routes) generated from the Go CLI and
+committed `results/` bundles by `scripts/build-demo-site.sh` with a `--check`
+drift gate wired into CI (`.github/workflows/ci.yml`, unrun). Published to
+https://sre-portfolio-demos.vercel.app/ via `scripts/deploy-vercel.sh`, which
+stamps the deployed commit into `BUILD.json` and refuses to publish on
+mismatch; verification evidence in `results/deploy-20261005T064754Z/`.
+`PUBLIC_LINKS.md` and `CV_SNIPPETS.tex` carry only URLs fetched anonymously
+on 2026-10-05. No lab behaviour changed; no live cluster run.

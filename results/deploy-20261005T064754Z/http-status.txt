@@ -1,0 +1,17 @@
+# deploy verification refreshed 20261005T072157Z UTC
+# base: https://sre-portfolio-demos.vercel.app (anonymous curl, no cookies, no token)
+# HEAD at verify: 5bf47289749902c97dc7605f3431254ec55a0bec
+
+/                                             200 3915 bytes
+/budgetguard/                                 200 5042 bytes
+/faultlab/                                    200 5454 bytes
+/recoverops/                                  200 6201 bytes
+/slos/reservations.yaml                       200 444 bytes
+/budgetguard/data/manifest.json               200 671 bytes
+/budgetguard/data/error.json                  200 625 bytes
+/budgetguard/data/slow.json                   200 543 bytes
+/budgetguard/data/thin.json                   200 487 bytes
+/faultlab/data/passed.json                    200 1855 bytes
+/faultlab/data/aborted.json                   200 1909 bytes
+/recoverops/data/r3-live.json                 200 5297 bytes
+/BUILD.json                                   200 316 bytes

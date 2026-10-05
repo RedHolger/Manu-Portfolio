@@ -1,0 +1,9 @@
+{
+  "commit": "5bf47289749902c97dc7605f3431254ec55a0bec",
+  "commit_short": "5bf472897499",
+  "commit_time": "2026-10-05T07:51:28+01:00",
+  "go_version": "go1.27.1",
+  "generator": "scripts/build-demo-site.sh",
+  "deploy_commit": "5bf47289749902c97dc7605f3431254ec55a0bec",
+  "deploy_commit_short": "5bf472897499"
+}

@@ -261,3 +261,24 @@ Decisions worth remembering (see code comments):
   shell syntax checks, and `git diff --check` passed. No live cluster,
   Prometheus, Alertmanager, PostgreSQL, matrix, or portfolio acceptance was
   run; R4 and Portfolio remain `IMPLEMENTED_UNVERIFIED`.
+
+## publish-demos: site + CI + deploy — 2026-10-05
+- Branch `publish-demos` (from `recoverops-dev` @ `ba51daa`). Commits:
+  `c87ae22` site+CI, `d18b8ff` build stamp, `865b031` commit-independent
+  data, `5bf4728` deploy stamp + `--stamp-deploy`, plus docs/ledgers.
+- Live: **https://sre-portfolio-demos.vercel.app/** (routes `/budgetguard/`,
+  `/faultlab/`, `/recoverops/`), project `sre-portfolio-demos`,
+  protections off (`ssoProtection: null`, `gitForkProtection: false`).
+- Verification bundle: `results/deploy-20261005T064754Z/` (http-status,
+  DOM dumps, screenshots, console.txt = 0 issues, git-tree-match,
+  live-BUILD.json, summary.md). Live `deploy_commit` == deployed commit.
+- Redeploy with `./scripts/deploy-vercel.sh` (stamps, uploads from a
+  `.git`-free copy because Vercel rejects our commit author, verifies,
+  unstamps the working tree).
+- Outputs for the CV: `PUBLIC_LINKS.md`, `CV_SNIPPETS.tex`, README "Demo
+  site" section. GitHub URL stays marked NOT YET VERIFIED.
+- Gates G-4, G-5, G-6 now ACCEPTED in `DEPLOYMENT_PLAN.md`; G-1 re-scan
+  clean after site/CI.
+- Still blocked: no GitHub repository (create in browser, then
+  `git ls-remote origin HEAD` before push) → `.github/workflows/ci.yml`
+  has never executed. Docker down → no live lab run this session.
