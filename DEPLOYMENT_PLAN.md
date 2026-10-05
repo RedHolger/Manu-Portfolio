@@ -71,17 +71,22 @@ unchanged; this plan covers publication and demos only).
 | G-0 findings | Findings A–E either fixed with regression tests that run green, or documented as unresolved with reasons (no false completion) | ACCEPTED at `cb4da08` |
 | G-1 hygiene | Secret scan of tracked files + history before first push; no credentials in tree or history | ACCEPTED at `9bddb19`; re-scanned at `865b031` (site + CI clean) |
 | G-2 pages | `docs/projects/{budgetguard,faultlab,recoverops}.md` + rewritten root README exist and match reality | ACCEPTED at `ba51daa` |
-| G-3 build | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l`, `make test-rules`, `make test-scripts` green locally | ACCEPTED at `cb4da08` |
+| G-3 build | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l`, `make test-rules`, `make test-scripts` green locally | ACCEPTED at `cb4da08`; re-verified in CI (run 4, `89d0c72`) |
 | G-4 deploy | Site deployed to a real, no-charge URL; three routes load without auth | ACCEPTED — `https://sre-portfolio-demos.vercel.app/`, 13 endpoints 200 without auth |
 | G-5 verify | Each URL opened, refreshed, exercised, console/network checked, screenshots captured, build commit displayed matches deployed commit | ACCEPTED — `results/deploy-20261005T064754Z/` (DOM, screenshots, 0 console issues, `deploy_commit` = `5bf4728`) |
 | G-6 outputs | `PUBLIC_LINKS.md` + three LaTeX CV snippets using only verified URLs | ACCEPTED — `PUBLIC_LINKS.md`, `CV_SNIPPETS.tex` |
 
 ## Current blockers
 
-1. GitHub repository — RESOLVED 2026-10-05: created as
+1. GitHub repository / Actions — RESOLVED 2026-10-05: created as
    `RedHolger/Manu-Portfolio` (public, empty), `origin` re-pointed, all five
-   branches pushed (baselines intact), first Actions run started. CI is
-   IMPLEMENTED_UNVERIFIED until that run (and the next push) is green.
+   branches pushed (baselines `0fe8b77`/`cad2f7e` intact), CI green on run 4
+   (`89d0c72`, all four jobs). Cause of the first two failures: six shebang
+   scripts were tracked 100644 because this checkout has
+   `core.fileMode=false`; fixed with `update-index --chmod=+x` and guarded by
+   a CI step. Run 3 failed a unit test on the runner (log not readable
+   without admin rights); `go test` output is now annotated so a recurrence
+   names the test.
 2. GitHub Pages — optional and not chosen: the demo site is hosted on Vercel
    (`PUBLIC_LINKS.md`); enabling Pages later must not double-publish the same
    site at an unverified URL.

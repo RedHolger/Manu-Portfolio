@@ -80,4 +80,8 @@ https://sre-portfolio-demos.vercel.app/ via `scripts/deploy-vercel.sh`, which
 stamps the deployed commit into `BUILD.json` and refuses to publish on
 mismatch; verification evidence in `results/deploy-20261005T064754Z/`.
 `PUBLIC_LINKS.md` and `CV_SNIPPETS.tex` carry only URLs fetched anonymously
-on 2026-10-05. No lab behaviour changed; no live cluster run.
+on 2026-10-05. Published to github.com/RedHolger/Manu-Portfolio with CI green
+(go/tests, promtool, shell self-tests, site drift); six shell scripts that
+were tracked 100644 under `core.fileMode=false` are now 100755, so
+`make setup`/`register` and the demo generator work in a fresh clone.
+No lab behaviour changed; no live cluster run.

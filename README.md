@@ -1,5 +1,7 @@
 # sre-portfolio — a shared SRE lab and three v1.0 products
 
+[![ci](https://github.com/RedHolger/Manu-Portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/RedHolger/Manu-Portfolio/actions/workflows/ci.yml) — build · vet · gofmt · tests, promtool fixtures, shell self-tests, demo-site drift check
+
 **BudgetGuard** (SLO compiler + canary gate), **FaultLab** (journaled chaos
 experiments), **RecoverOps** (evidence-bound automated recovery) — built on a
 local `kind` lab with a reservation API, versioned gateway, load generator,

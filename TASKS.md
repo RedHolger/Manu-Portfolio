@@ -767,3 +767,28 @@ Status reflects executed tests and measured outcomes only.
 - Next: create repo → `git ls-remote origin HEAD` → `git push -u origin
   publish-demos` → watch Actions → attach Pages if wanted → screenshots
   already captured; then merge per release process.
+
+## Session 2026-10-05 (c) — repository published, CI green
+
+- `origin` re-pointed to git@github.com:RedHolger/Manu-Portfolio.git (the
+  repository the owner created in the browser; it was empty). All five
+  branches pushed: `publish-demos` (default), `master` @ `0fe8b77`,
+  `recoverops-dev`, `ba51daa`, `faultlab-dev`, `correctness-fixes` @ `cad2f7e`.
+  Pre-push secret re-scan: tracked files + `ba51daa..HEAD` history clean
+  (only a `<user>:<password>` placeholder DSN in a Go doc comment).
+- CI debug loop (job logs need admin rights; check-run annotations are public):
+  - run 1/2 `site` failed → six shebang scripts tracked 100644 because
+    `core.fileMode=false`; `git status` hides mode-only changes and `git add`
+    never picks up `chmod(2)`. Fixed with `update-index --chmod=+x`;
+    `scripts` job now fails if any `scripts/*.sh` is not 100755; site step
+    distinguishes permission-denied (126) from real drift.
+  - run 3 `unit tests` failed on the runner; log unreadable. Added
+    `::error` annotations + step summary for `go test` failures.
+  - run 4 (`89d0c72`): all four jobs GREEN. Badge fetched: `ci - passing`.
+- `make` targets `./scripts/setup-recoverops.sh`,
+  `./scripts/register-recoverops.sh`, `./scripts/r4-pair.sh` were equally
+  broken in a fresh clone; same fix.
+- Docs: README CI badge, `PUBLIC_LINKS.md` Actions row = passing,
+  `DEPLOYMENT_PLAN.md` blocker 1 resolved, `CV_SNIPPETS.tex` repo href.
+- Still open: no live lab run (docker down); GitHub Pages not chosen
+  (Vercel hosts the demos).

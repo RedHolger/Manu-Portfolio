@@ -41,7 +41,8 @@ Supporting files (also verified 200):
 | URL | Status |
 |---|---|
 | <https://github.com/RedHolger/Manu-Portfolio> | **VERIFIED** 2026-10-05: `git ls-remote origin HEAD` → `b4933ef…` (all five branches present: `publish-demos` (default), `master` @ `0fe8b77`, `recoverops-dev`, `faultlab-dev`, `correctness-fixes`). |
-| <https://github.com/RedHolger/Manu-Portfolio/actions> | CI workflow `ci.yml` (jobs go/rules/scripts/site) — see run status before quoting it as passing. |
+| <https://github.com/RedHolger/Manu-Portfolio/actions> | CI `ci.yml` — **PASSING** on `89d0c72` (run 4: go, rules, scripts, site all green). Run 3 failed a unit test on the runner and run 1/2 failed on tracked exec bits; those are fixed and annotated for diagnosis if they recur. |
+| <https://github.com/RedHolger/Manu-Portfolio/actions/workflows/ci.yml/badge.svg> | badge, fetched 2026-10-05: `ci - passing` |
 
 Baselines `0fe8b77` (master) and `cad2f7e` (correctness-fixes) were pushed as-is;
 no history was rewritten and no `results/` bundle was deleted.

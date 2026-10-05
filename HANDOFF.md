@@ -283,8 +283,16 @@ Decisions worth remembering (see code comments):
   empty); redeploy with `./scripts/deploy-vercel.sh` after any `site/` change.
 - Repository published 2026-10-05: `origin` = git@github.com:RedHolger/Manu-Portfolio.git
   (public, created empty in the browser). All five branches pushed, baselines
-  `0fe8b77`/`cad2f7e` unchanged; default branch `publish-demos`. First CI run:
-  https://github.com/RedHolger/Manu-Portfolio/actions/runs/37283401559
-  (watch it — CI stays IMPLEMENTED_UNVERIFIED until green).
+  `0fe8b77`/`cad2f7e` unchanged; default branch `publish-demos`.
   `PUBLIC_LINKS.md` and `CV_SNIPPETS.tex` now carry the verified repo URL.
+- CI: run 4 (`89d0c72`) GREEN — build/vet/gofmt/test, promtool fixtures,
+  shell self-tests, demo-site drift. Runs 1–2 failed because six shebang
+  scripts were tracked 100644 (`core.fileMode=false` on this exFAT checkout:
+  `chmod(2)` never reaches the index, and `git status` hides mode-only
+  changes). Fixed with `git update-index --chmod=+x` (verify modes with
+  `git ls-tree HEAD scripts/`, never with `ls -l`) and guarded by a CI step.
+  Run 3 failed `unit tests` on the runner with no readable log; `go test`
+  output is now emitted as check-run annotations (public API) so a
+  recurrence names the test. Local `go test ./... -count=1` green after the
+  same commits.
 - Docker down → no live lab run this session.
