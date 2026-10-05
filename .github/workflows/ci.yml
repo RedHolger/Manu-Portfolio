@@ -30,7 +30,23 @@ jobs:
           out="$(gofmt -l cmd internal)"
           if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
       - name: unit tests
-        run: go test ./... -count=1
+        # Output is captured so a failure can be annotated (readable via the
+        # public check-run annotations API) instead of only in the raw log.
+        run: |
+          set -uo pipefail
+          rc=0
+          go test ./... -count=1 > /tmp/test.log 2>&1 || rc=$?
+          if [ "$rc" -eq 0 ]; then tail -3 /tmp/test.log; exit 0; fi
+          { grep -E '^(--- FAIL|FAIL[[:space:]]|.*\[build failed\]|panic:)' /tmp/test.log \
+              || true; } | sed 's/^/::error::/' | head -10
+          {
+            echo '### go test failures'
+            echo '```'
+            tail -200 /tmp/test.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -60 /tmp/test.log
+          exit 1
 
   rules:
     name: prometheus rule fixtures
