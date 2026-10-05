@@ -78,17 +78,19 @@ unchanged; this plan covers publication and demos only).
 
 ## Current blockers
 
-1. GitHub repository creation / Pages / Actions — still pending: the user
-   creates `RedHolger/sre-portfolio` in the browser (public, empty), then
-   `GIT_SSH_COMMAND="ssh -o BatchMode=yes" git ls-remote origin HEAD` must
-   succeed before any push. `.github/workflows/ci.yml` is committed but has
-   never run; it is IMPLEMENTED_UNVERIFIED until Actions goes green.
-2. Live lab runs (Docker/kind down) — FaultLab recovery-health and phase
+1. GitHub repository — RESOLVED 2026-10-05: created as
+   `RedHolger/Manu-Portfolio` (public, empty), `origin` re-pointed, all five
+   branches pushed (baselines intact), first Actions run started. CI is
+   IMPLEMENTED_UNVERIFIED until that run (and the next push) is green.
+2. GitHub Pages — optional and not chosen: the demo site is hosted on Vercel
+   (`PUBLIC_LINKS.md`); enabling Pages later must not double-publish the same
+   site at an unverified URL.
+3. Live lab runs (Docker/kind down) — FaultLab recovery-health and phase
    behaviour beyond the unit/regression tests stay IMPLEMENTED_UNVERIFIED.
 
 ## Exact next command
 
 ```sh
-GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=8" git ls-remote origin HEAD
-# if it prints a SHA: git push -u origin publish-demos
+GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=8" git ls-remote --heads origin
+# then: open https://github.com/RedHolger/Manu-Portfolio/actions and read the ci run
 ```

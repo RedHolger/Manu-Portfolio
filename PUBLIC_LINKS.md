@@ -1,6 +1,7 @@
 # PUBLIC_LINKS.md — verified public URLs for the demo site
 
-Last verified: 2026-10-05 (UTC), commit `5bf472897499` — see
+Last verified: 2026-10-05 (UTC), site deploy `5bf472897499`, repository
+push at `b4933ef…` — see
 `results/deploy-20261005T064754Z/` for the raw evidence (HTTP statuses, DOM
 dumps, screenshots, console output, git-tree comparison).
 
@@ -39,6 +40,8 @@ Supporting files (also verified 200):
 
 | URL | Status |
 |---|---|
-| <https://github.com/RedHolger/sre-portfolio> | **NOT YET VERIFIED** — this is the configured `origin` remote; the repository has not been created yet (creation happens in the browser). The link becomes "verified" only after `git ls-remote origin HEAD` succeeds. |
+| <https://github.com/RedHolger/Manu-Portfolio> | **VERIFIED** 2026-10-05: `git ls-remote origin HEAD` → `b4933ef…` (all five branches present: `publish-demos` (default), `master` @ `0fe8b77`, `recoverops-dev`, `faultlab-dev`, `correctness-fixes`). |
+| <https://github.com/RedHolger/Manu-Portfolio/actions> | CI workflow `ci.yml` (jobs go/rules/scripts/site) — see run status before quoting it as passing. |
 
-Until that check passes, do not print the GitHub URL in a CV.
+Baselines `0fe8b77` (master) and `cad2f7e` (correctness-fixes) were pushed as-is;
+no history was rewritten and no `results/` bundle was deleted.

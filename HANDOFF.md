@@ -281,6 +281,10 @@ Decisions worth remembering (see code comments):
   clean after site/CI.
 - Site tree unchanged since `5bf4728` (`git diff 5bf4728..HEAD -- site/` is
   empty); redeploy with `./scripts/deploy-vercel.sh` after any `site/` change.
-- Still blocked: no GitHub repository (create in browser, then
-  `git ls-remote origin HEAD` before push) → `.github/workflows/ci.yml`
-  has never executed. Docker down → no live lab run this session.
+- Repository published 2026-10-05: `origin` = git@github.com:RedHolger/Manu-Portfolio.git
+  (public, created empty in the browser). All five branches pushed, baselines
+  `0fe8b77`/`cad2f7e` unchanged; default branch `publish-demos`. First CI run:
+  https://github.com/RedHolger/Manu-Portfolio/actions/runs/37283401559
+  (watch it — CI stays IMPLEMENTED_UNVERIFIED until green).
+  `PUBLIC_LINKS.md` and `CV_SNIPPETS.tex` now carry the verified repo URL.
+- Docker down → no live lab run this session.
