@@ -21,9 +21,9 @@ External review: PENDING throughout; never blocks local delivery.
 | R4 | RecoverOps | IMPLEMENTED_UNVERIFIED | Corrected source bundle applied after checkpoint `3a1a158`; durable intents, UID-bound execution, autonomous verification, measured schema-3 driver and cleanup safeguards are offline-tested; prior genuine AM evidence and pair-02 remain preserved | Live redeploy, migration/registration, Prometheus/Alertmanager verification, corrected pilot + 10 paired runs, demo, then acceptance |
 | Portfolio | Integration | IMPLEMENTED_UNVERIFIED | Standalone smoke 2026-10-03 (BG replay PASS, FL validate valid, RO VERIFYING; r3-live SMOKE.md); full integration demo PENDING R4 matrix | After R4 |
 
-Known issue (not a blocker, tracked): runner phase-key reuse — fault phases
-re-offer baseline keys when the seed is constant (see TASKS.md). Contract §7
-requires phase-disjoint keys with a targeted test; fix inside FaultLab milestone.
+Known issue RESOLVED 2026-10-05 (`cb4da08`): phase-key namespaces are now
+disjoint for baseline/fault/recovery (`phaseSeedOffset` 0 / 1000000 /
+2000000) with `TestPhaseKeyNamespacesDisjoint` covering 3 phases / 120 keys.
 
 Application note: the corrected source bundle is not a replacement Git history.
 Historical RV1/RV2 results remain historical and must not be mixed with new

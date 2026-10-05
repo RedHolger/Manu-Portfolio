@@ -1,50 +1,100 @@
-# sre-portfolio — shared SRE lab + BudgetGuard + FaultLab (RecoverOps authorized)
+# sre-portfolio — a shared SRE lab and three v1.0 products
 
-Status: **corrected implementation delivered; new RecoverOps/portfolio live
-acceptance pending**. Start with [the corrected handoff](docs/CORRECTED_HANDOFF.md)
-and [current gates](RELEASE_STATUS.md). The commands below include historical
-examples; the handoff gives the current upgrade/demo sequence. Original raw
-results stay in the user's repository and are not bundled in the source-only ZIP.
+**BudgetGuard** (SLO compiler + canary gate), **FaultLab** (journaled chaos
+experiments), **RecoverOps** (evidence-bound automated recovery) — built on a
+local `kind` lab with a reservation API, versioned gateway, load generator,
+PostgreSQL and Prometheus.
 
-## What this is
-- `cmd/labapi` — reservation API (PostgreSQL-backed idempotent writes;
-  MemStore for dependency-free local runs)
-- `cmd/labgateway` — versioned %-routing + bounded, TTL'd fault admin
-- `cmd/labload` — open-loop load generator (JSONL history + validity checks)
-- `cmd/budgetguard` — `validate|compile|status|evaluate|replay`:
-  SLO compiler (Prometheus rules) + canary release evaluator
-  (PASS exit 0 / FAIL exit 2 / INCONCLUSIVE exit 3)
+Status: work is tracked in [RELEASE_STATUS.md](RELEASE_STATUS.md) (one gate
+table) against the frozen contract in [RELEASE_PLAN.md](RELEASE_PLAN.md).
+BudgetGuard, FaultLab and lab readiness are **ACCEPTED**; RecoverOps R4 and the
+full portfolio integration are **IMPLEMENTED_UNVERIFIED**. Nothing on this page
+claims more than that table does.
 
-## Historical live results (versions recorded in their artifacts)
-- Unit: `go test ./...` all green incl. `-race`; `go vet` clean.
-- Rules: `promtool test rules monitoring/rule-tests.yaml` 9/9
-  (healthy, sustained error, moderate/severe burst, slow-only, counter
-  reset, client_error exclusion, flat-traffic, missing series).
-- Native live: healthy→PASS, error→FAIL, slow→FAIL, empty/stale/dead
-  telemetry→INCONCLUSIVE. Seeded suite 15/15 (`results/budgetguard/seeded-…`).
-- Kind (`sre-lab`) live: smoke PASS, Postgres integration 4/4, seeded
-  healthy 5/5 PASS, error reps FAIL, slow reps FAIL, client-error
-  exclusion PASS with 594×400s on the wire (`results/budgetguard/kind-*`).
-- Dashboard: `results/budgetguard/screenshots/slo-overview.png` (real
-  Grafana, live traffic; axis cosmetics noted below).
+## Products
 
-## Reproduce (kind path)
+| Product | What it does | Status |
+|---|---|---|
+| [BudgetGuard](docs/projects/budgetguard.md) | Compiles a written SLO into Prometheus alert rules and turns measured traffic into PASS / FAIL / **INCONCLUSIVE** release decisions (exit 0 / 2 / 3), with a full-window telemetry coverage gate | B-01…B-04 ACCEPTED |
+| [FaultLab](docs/projects/faultlab.md) | Runs bounded fault experiments (delay, connection failure, dependency failure, pod delete) against the lab, journaled so the run can be audited afterwards: intent → apply → observe → cleanup → recovery health | F-01…F-05 ACCEPTED |
+| [RecoverOps](docs/projects/recoverops.md) | Accepts alert webhooks, proposes a policy-checked single remediation, executes it as a UID-pinned template-only patch in the lab, and verifies recovery from measured traffic before RESOLVED | R1…R3 ACCEPTED, R4 unverified |
+
+Shared lab: `cmd/labapi` (idempotent reservation API, PostgreSQL + MemStore),
+`cmd/labgateway` (versioned routing + TTL'd fault admin),
+`cmd/labload` (open-loop load generator with a JSONL history and validity
+checks), `deploy/` (kind cluster, Prometheus, Grafana).
+
+## Quick start
+
 ```sh
-make doctor            # diagnostics only; nonzero = missing prerequisite
-make bootstrap         # creates ONLY the kind-sre-lab cluster
-./scripts/build-images.sh
-kubectl apply -k deploy/base   # + secrets + prometheus-rules ConfigMap, see docs/runbook.md
-make lab-up && make smoke
-./scripts/seeded-suite-kind.sh # per-rep isolation + disk floor/watchdog
+go build ./...              # or: go build -o bin/ ./cmd/...
+go vet ./... && gofmt -l cmd internal
+go test ./...
+make test-rules             # promtool rule fixtures (requires promtool)
+make test-scripts           # shell self-tests
+make lint                   # gofmt + vet + config validation
 ```
 
-## Known imperfections (read before citing numbers)
-- Grafana bad-ratio panels autoscale % axes coarsely; legend shows raw
-  series names. Data is correct; presentation is unpolished.
-- `excludeResults: [client_error]` verified live (400s excluded, PASS held).
-- One native slow single + one kind error rep (`error-222`) are marked
-  CONTAMINATED (overlapping window / disk-stall crawl) and excluded from
-  benchmark counts; both preserved. Details: `docs/limitations.md`,
-  `results/SUMMARY.md`, `docs/postmortems/`.
-- A 5-minute canary never proves a 30-day SLO: `history_complete` is
-  always false in the lab.
+Full lab path (Docker + kind required; `make doctor` reports missing
+prerequisites, it does not pretend they are present):
+
+```sh
+make doctor         # diagnostics only; nonzero = prerequisite missing
+make bootstrap      # creates ONLY the kind-sre-lab cluster
+./scripts/build-images.sh
+kubectl apply -k deploy/base        # + secrets + rules, see docs/runbook.md
+make lab-up && make smoke
+```
+
+Every Kubernetes-touching script and binary requires the explicit
+`kind-sre-lab` context; there is no fallback to whatever context is current.
+
+## Evidence
+
+- Gate table: [RELEASE_STATUS.md](RELEASE_STATUS.md) — commit/evidence per gate,
+  including what is still unverified.
+- Result index with per-environment counts:
+  [results/SUMMARY.md](results/SUMMARY.md); FaultLab demos:
+  [results/faultlab/EVIDENCE.md](results/faultlab/EVIDENCE.md).
+- Failed, inconclusive and contaminated runs are preserved with reasons and
+  excluded from benchmark totals — they are never deleted to make a suite
+  green.
+- Corrections from independent review (BG-01…BG-10) are recorded in
+  [TASKS.md](TASKS.md); full review text in
+  [docs/REVIEW.md](docs/REVIEW.md).
+
+## Safety and scope
+
+- This is a **local teaching lab**: single-node kind models application and pod
+  failure, not production networking or multi-cluster failure.
+- No public Kubernetes control plane, no public fault-injection admin, no
+  execute/patch/rollback action reachable by anonymous users. Admin tokens
+  (`LAB_ADMIN_TOKEN`, `RECOVEROPS_TOKEN`) are read from the environment or an
+  ignored `*.env` file and are never committed.
+- Faults are TTL'd and cleared by the gateway itself; cleanup runs on a fresh
+  bounded context and is idempotent; RecoverOps defaults to `observe` mode,
+  which performs zero cluster writes.
+- A 5-minute canary never proves a 30-day SLO. Every short-window run is
+  labelled as preliminary evidence.
+
+## Known imperfections
+
+- Grafana bad-ratio panels autoscale % axes coarsely (data is correct,
+  presentation is unpolished).
+- Contaminated runs exist and are listed in
+  [results/SUMMARY.md](results/SUMMARY.md) with reasons.
+- RecoverOps R4 and the portfolio integration are not yet live-verified; see
+  the gate table for exactly what remains.
+
+## Repository layout
+
+```
+cmd/         labapi, labgateway, labload, budgetguard, faultlab, recoverops
+internal/    workload, gateway, telemetry, budgetguard, faultlab, recoverops
+configs/     SLO and fault-scenario YAML (the reviewed source of truth)
+monitoring/  generated alert rules + promtool fixtures
+deploy/      kustomize base for the kind lab (API, gateway, DB, Prometheus)
+scripts/     bootstrap, suites, acceptance, safety (disk floor, context guard)
+results/     run bundles: journals, decisions, reports, screenshots
+docs/        architecture, runbook, review, limitations, postmortems, plans
+```
