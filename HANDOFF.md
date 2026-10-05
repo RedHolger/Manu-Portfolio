@@ -279,6 +279,8 @@ Decisions worth remembering (see code comments):
   site" section. GitHub URL stays marked NOT YET VERIFIED.
 - Gates G-4, G-5, G-6 now ACCEPTED in `DEPLOYMENT_PLAN.md`; G-1 re-scan
   clean after site/CI.
+- Site tree unchanged since `5bf4728` (`git diff 5bf4728..HEAD -- site/` is
+  empty); redeploy with `./scripts/deploy-vercel.sh` after any `site/` change.
 - Still blocked: no GitHub repository (create in browser, then
   `git ls-remote origin HEAD` before push) → `.github/workflows/ci.yml`
   has never executed. Docker down → no live lab run this session.

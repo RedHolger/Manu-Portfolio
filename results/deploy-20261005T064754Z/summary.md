@@ -45,6 +45,13 @@ Host: Vercel, project `sre-portfolio-demos` (hobby/static, no charge),
 open https://sre-portfolio-demos.vercel.app/
 ```
 
+## Relationship to later commits
+
+`git diff 5bf472897499..HEAD -- site/` is empty: the commits that followed
+the deployment (docs, this evidence bundle) did not touch `site/`, so the live
+tree is still the tree of `5bf472897499`. Redeploy with
+`./scripts/deploy-vercel.sh` whenever `site/` changes.
+
 ## Notes / history
 
 * First deploy (07:46 local) went through with project default protection on
