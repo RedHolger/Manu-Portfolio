@@ -12,10 +12,14 @@ All fixed on `correctness-fixes` (`cad2f7e`); live reruns done in-kind.
 Status reflects executed tests and measured outcomes only.
 
 - BG-01 Full-window telemetry coverage — DONE. Files: `internal/budgetguard/coverage.go`,
-  `coverage_test.go`, `evaluate.go` (wired). Criteria: ≤10% missing, no gap >20s,
-  window edges verified per slot or INCONCLUSIVE. Tests: 4 coverage tests
-  (full/short/gap/empty) + live full-window suite 9/9 (rate 25 × 330s, zero
-  INCONCLUSIVE). Outcome: enforced live. Blockers: none. Commit: `cad2f7e`.
+  `coverage_test.go`, `evaluate.go` (wired). Criteria: ≤10% missing, no gap >20s
+  measured between consecutive present buckets ((worst+1)*step, so one empty
+  15s bucket = 30s inter-sample gap), window edges verified per slot or
+  INCONCLUSIVE. Tests: 6 coverage tests
+  (full/short/gap/empty/sixty-second-spread/single-missing-bucket) + live
+  full-window suite 9/9 (rate 25 × 330s, zero INCONCLUSIVE) + 2026-10-05
+  healthy-2001 confirmation PASS under the stricter rule. Outcome: enforced
+  live. Blockers: none. Commit: `cad2f7e`, gap fix `05c5ffa`.
 - BG-02 Validation on the instant-query path — DONE. Files:
   `internal/telemetry/client.go` (`checkEnvelope`, `checkSamples`, `QueryMatrix`).
   Criteria: warnings + NaN/Inf rejected on instant and range paths. Tests: 3

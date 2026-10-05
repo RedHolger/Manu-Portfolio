@@ -302,3 +302,23 @@ Decisions worth remembering (see code comments):
   recurrence names the test. Local `go test ./... -count=1` green after the
   same commits.
 - Docker down → no live lab run this session.
+
+## Session 2026-10-05 (recorded-evidence review follow-ups)
+- Fixed both findings on `publish-demos`: BudgetGuard gap now (worst+1)*step
+  (`05c5ffa`, `TestCoverageSingleMissingBucketFails`); FaultLab recovery uses
+  independent `MaxRecoveryFailureRatio` 5% + >=3 2xx floor
+  (`TestRecoveryAllFailWithPermissiveAbortFails`,
+  `TestRecoveryWithoutSuccessesFails`). All three regressions fail on prior
+  code, pass on fix. `go test ./...`, `go vet`, `gofmt`, site `--check` green.
+- Live (kind-sre-lab, docker back up): faultlab short-delay PASSED
+  (recovery-health 400/400/0 -> recovery-ok); budgetguard healthy-2001 330s
+  rep PASS `within_gate` under the stricter rule. Evidence committed
+  (`c2546b2`); full-length delay runs CLEANUP_FAILED x2 on a pre-existing
+  unrelated flake (gateway admin DELETE EOF after ~100s idle through kubectl
+  forward; manual PUT/DELETE healthy) + 1 operator-cancelled; all preserved.
+- CI green on `05c5ffa` and `c2546b2` (all four jobs, public check-runs API).
+  Redeployed: live `deploy_commit` == `c2546b2`, all demo routes HTTP 200.
+- Open: full-length faultlab live PASS still blocked by the cleanup EOF flake
+  (needs its own investigation; candidate: stale keep-alive through forward
+  under load); suite summary step trips on exFAT `._*` sidecars in its own
+  results glob (cosmetic, BACKLOG candidate); GitHub Pages not chosen.
