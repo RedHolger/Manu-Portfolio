@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FaultLab — journal excerpts</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header>
+  <p><a href="../">← all demos</a></p>
+  <h1>FaultLab</h1>
+  <p>Bounded fault experiments against the lab gateway, journaled so a run can
+     be audited afterwards: intent before mutation, cleanup on a fresh bounded
+     context, TTL expiry enforced by the gateway itself.</p>
+  <p class="label"><span class="tag recorded">recorded live run</span>
+     Read-only dumps of the SQLite journals committed under
+     <code>results/faultlab/</code>. Timestamps and states are exactly as the
+     runner wrote them on the dates shown — nothing is replayed or edited.</p>
+  <p class="label" id="build">…</p>
+</header>
+<main>
+  <div id="demos"></div>
+
+  <h2>What each state means</h2>
+  <table>
+    <thead><tr><th>state</th><th>meaning</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge">PREFLIGHT</span></td><td>context checked, injector reachable, no mutation yet</td></tr>
+      <tr><td><span class="badge">BASELINE</span> → <span class="badge">OBSERVING</span></td><td>unfaulted load, then fault applied and observed</td></tr>
+      <tr><td><span class="badge">CLEANING</span></td><td>recorded faults cleared, zero live faults verified</td></tr>
+      <tr><td><span class="badge">VERIFYING</span></td><td>post-cleanup health, workload validity, declared assertions</td></tr>
+      <tr><td><span class="badge pass">PASSED</span> / <span class="badge fail">FAILED</span></td><td>terminal outcomes</td></tr>
+      <tr><td><span class="badge fail">CLEANUP_FAILED</span></td><td>restoration could not be verified — never a success</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Schema note</h2>
+  <p class="muted">The journals above were recorded on 2026-09-28. Since the
+     2026-10-05 correctness work the runner additionally journals
+     <code>cleanup-ok</code>, <code>recovery-health</code>,
+     <code>recovery-failed</code>, <code>recovery-skipped</code>,
+     <code>phase-load</code> and <code>oracle</code>, persists every workload
+     phase to <code>phases.json</code>, and refuses to report PASSED unless
+     the post-cleanup recovery phase met its health gate. Those paths are
+     unit-tested (<code>-race</code> green); a live rerun with them is still
+     pending, so no new live claim is made here.</p>
+</main>
+<footer><p><a href="../">sre-portfolio demos</a></p></footer>
+<script>
+function add(parent, tag, cls, value) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (value !== undefined) n.textContent = String(value);
+  parent.appendChild(n);
+  return n;
+}
+function badgeFor(state) {
+  if (state === 'PASSED') return 'badge pass';
+  if (state === 'FAILED' || state === 'CLEANUP_FAILED') return 'badge fail';
+  return 'badge';
+}
+
+fetch('../BUILD.json').then(function (r) { return r.json(); }).then(function (b) {
+  document.getElementById('build').textContent =
+    'site data generated from commit ' + b.commit_short + ' (' + b.commit_time + ')';
+});
+
+var demos = [
+  { file: 'passed', title: 'Recovered run (PASSED)' },
+  { file: 'aborted', title: 'Aborted run (FAILED)' }
+];
+
+demos.forEach(function (demo) {
+  fetch('./data/' + demo.file + '.json')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var card = add(document.getElementById('demos'), 'section', 'card');
+      add(card, 'h3', '', demo.title);
+      add(card, 'p', 'muted', d.note);
+
+      d.runs.forEach(function (run) {
+        var t = add(card, 'table');
+        var head = add(t, 'tr');
+        ['run', 'state', 'started (UTC)', 'seed', 'error'].forEach(function (h) { add(head, 'th', '', h); });
+        var tr = add(t, 'tr');
+        add(tr, 'td', '', run.id);
+        var td = add(tr, 'td');
+        add(td, 'span', badgeFor(run.state), run.state);
+        add(tr, 'td', '', run.started_at);
+        add(tr, 'td', '', run.seed);
+        add(tr, 'td', 'muted', run.error || '—');
+      });
+
+      add(card, 'h3', '', 'journal events');
+      var ol = add(card, 'ol', 'timeline');
+      d.events.forEach(function (e) {
+        var li = add(ol, 'li');
+        add(li, 'span', 'kind', e.sequence + ' · ' + e.kind);
+        add(li, 'span', 'muted', '  ' + e.timestamp);
+        if (e.payload_json && e.payload_json !== '{}') {
+          add(li, 'pre', '', e.payload_json);
+        }
+      });
+
+      if (d.faults.length) {
+        add(card, 'h3', '', 'faults');
+        var t2 = add(card, 'table');
+        var head2 = add(t2, 'tr');
+        ['id', 'kind', 'target', 'applied', 'cleared', 'expires'].forEach(function (h) { add(head2, 'th', '', h); });
+        d.faults.forEach(function (f) {
+          var tr2 = add(t2, 'tr');
+          add(tr2, 'td', '', f.id);
+          add(tr2, 'td', '', f.kind);
+          var td2 = add(tr2, 'td');
+          add(td2, 'code', '', f.target_json);
+          add(tr2, 'td', '', f.applied_at || '—');
+          add(tr2, 'td', '', f.cleared_at || '—');
+          add(tr2, 'td', '', f.expires_at);
+        });
+      }
+
+      var link = add(card, 'p');
+      var a = add(link, 'a', '', 'raw journal dump');
+      a.href = './data/' + demo.file + '.json';
+    })
+    .catch(function (e) {
+      add(document.getElementById('demos'), 'p', 'error', demo.file + ': load failed: ' + e);
+    });
+});
+</script>
+</body>
+</html>

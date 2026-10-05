@@ -1,0 +1,79 @@
+{
+ "commit": "ba51daa9777c38eb63f618e0f1c65ee7b6595cae",
+ "events": [
+  {
+   "kind": "created",
+   "payload_json": "{}",
+   "sequence": 0,
+   "timestamp": "2026-09-28T16:39:30.34344Z"
+  },
+  {
+   "kind": "preflight",
+   "payload_json": "{}",
+   "sequence": 1,
+   "timestamp": "2026-09-28T16:39:30.439818Z"
+  },
+  {
+   "kind": "baseline-start",
+   "payload_json": "{}",
+   "sequence": 2,
+   "timestamp": "2026-09-28T16:39:30.452271Z"
+  },
+  {
+   "kind": "inject",
+   "payload_json": "{\"fault\":\"short-delay-1790613570-f1\"}",
+   "sequence": 3,
+   "timestamp": "2026-09-28T16:39:40.45748Z"
+  },
+  {
+   "kind": "observe-start",
+   "payload_json": "{}",
+   "sequence": 4,
+   "timestamp": "2026-09-28T16:39:40.464044Z"
+  },
+  {
+   "kind": "cleanup",
+   "payload_json": "{\"reason\":\"observe-complete\"}",
+   "sequence": 5,
+   "timestamp": "2026-09-28T16:40:00.878036Z"
+  },
+  {
+   "kind": "verify",
+   "payload_json": "{}",
+   "sequence": 6,
+   "timestamp": "2026-09-28T16:40:00.882957Z"
+  },
+  {
+   "kind": "resolved",
+   "payload_json": "{}",
+   "sequence": 7,
+   "timestamp": "2026-09-28T16:40:00.883179Z"
+  }
+ ],
+ "faults": [
+  {
+   "applied_at": "2026-09-28T16:39:40.463694Z",
+   "cleared_at": "2026-09-28T16:40:00.881085Z",
+   "expires_at": "2026-09-28T16:40:10.456863Z",
+   "id": "short-delay-1790613570-f1",
+   "kind": "gateway_delay",
+   "target_json": "{\"slot\":\"stable\",\"fraction\":0.5}"
+  }
+ ],
+ "generated_by": "scripts/build-demo-site.sh",
+ "note": "Live kind-sre-lab run: 400ms/50% delay for 20s, PASSED with zero live faults after cleanup.",
+ "recorded_evidence": true,
+ "runs": [
+  {
+   "deadline_at": "2026-09-28T16:42:10.343397Z",
+   "error": "",
+   "id": "short-delay-1790613570",
+   "scenario_hash": "short-delay",
+   "seed": 11,
+   "service": "reservations",
+   "started_at": "2026-09-28T16:39:30.343429Z",
+   "state": "PASSED"
+  }
+ ],
+ "source": "results/faultlab/demo2-expire/j.db"
+}

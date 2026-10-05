@@ -1,0 +1,21 @@
+apiVersion: portfolio.sre/v1
+kind: ServiceSLO
+metadata:
+  name: reservations
+spec:
+  service: reservations
+  period: 30d
+  availability:
+    target: 0.999
+  latency:
+    target: 0.99
+    thresholdSeconds: 0.3
+  excludeResults: [client_error]
+  freshnessSeconds: 20
+  releaseGate:
+    observationSeconds: 300
+    minRequestsPerSlot: 1000
+    maxErrorRate: 0.01
+    maxErrorRateIncrease: 0.005
+    maxSlowRate: 0.02
+    maxSlowRateIncrease: 0.01

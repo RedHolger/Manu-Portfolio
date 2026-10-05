@@ -1,0 +1,79 @@
+{
+ "commit": "ba51daa9777c38eb63f618e0f1c65ee7b6595cae",
+ "events": [
+  {
+   "kind": "created",
+   "payload_json": "{}",
+   "sequence": 0,
+   "timestamp": "2026-09-28T16:44:16.445635Z"
+  },
+  {
+   "kind": "preflight",
+   "payload_json": "{}",
+   "sequence": 1,
+   "timestamp": "2026-09-28T16:44:16.559492Z"
+  },
+  {
+   "kind": "baseline-start",
+   "payload_json": "{}",
+   "sequence": 2,
+   "timestamp": "2026-09-28T16:44:16.570699Z"
+  },
+  {
+   "kind": "inject",
+   "payload_json": "{\"fault\":\"abort-fail-1790613856-f1\"}",
+   "sequence": 3,
+   "timestamp": "2026-09-28T16:44:26.578143Z"
+  },
+  {
+   "kind": "observe-start",
+   "payload_json": "{}",
+   "sequence": 4,
+   "timestamp": "2026-09-28T16:44:26.581563Z"
+  },
+  {
+   "kind": "cleanup",
+   "payload_json": "{\"reason\":\"abort: failure ratio above 50%\"}",
+   "sequence": 5,
+   "timestamp": "2026-09-28T16:44:37.589907Z"
+  },
+  {
+   "kind": "verify",
+   "payload_json": "{}",
+   "sequence": 6,
+   "timestamp": "2026-09-28T16:44:37.597535Z"
+  },
+  {
+   "kind": "resolved",
+   "payload_json": "{}",
+   "sequence": 7,
+   "timestamp": "2026-09-28T16:44:37.597801Z"
+  }
+ ],
+ "faults": [
+  {
+   "applied_at": "2026-09-28T16:44:26.581403Z",
+   "cleared_at": "2026-09-28T16:44:37.594377Z",
+   "expires_at": "2026-09-28T16:44:56.577662Z",
+   "id": "abort-fail-1790613856-f1",
+   "kind": "conn_fail",
+   "target_json": "{\"slot\":\"stable\",\"fraction\":1}"
+  }
+ ],
+ "generated_by": "scripts/build-demo-site.sh",
+ "note": "Live kind-sre-lab run: connection failure above the abort threshold; the runner cleaned up and recorded FAILED.",
+ "recorded_evidence": true,
+ "runs": [
+  {
+   "deadline_at": "2026-09-28T16:46:56.445574Z",
+   "error": "abort: failure ratio above 50%",
+   "id": "abort-fail-1790613856",
+   "scenario_hash": "abort-fail",
+   "seed": 14,
+   "service": "reservations",
+   "started_at": "2026-09-28T16:44:16.44562Z",
+   "state": "FAILED"
+  }
+ ],
+ "source": "results/faultlab/demo6-abort/j.db"
+}

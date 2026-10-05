@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecoverOps — incident journal</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header>
+  <p><a href="../">← all demos</a></p>
+  <h1>RecoverOps</h1>
+  <p>Accepts alert webhooks, proposes a policy-checked single remediation,
+     executes it as a UID-pinned template-only patch in the lab, and verifies
+     recovery from measured traffic before anything is called RESOLVED.</p>
+  <p class="label"><span class="tag recorded">recorded live run</span>
+     Incidents, actions and events read straight out of the SQLite journal
+     committed under <code>results/recoverops/r3-live-20261003T151252Z/</code>.
+     Template bodies are replaced by their length; nothing else is edited.</p>
+  <p class="label" id="build">…</p>
+</header>
+<main>
+  <div id="run"></div>
+
+  <h2>State machine</h2>
+  <pre>RECEIVED → VALIDATING → OBSERVING → ELIGIBLE → EXECUTING → VERIFYING → RESOLVED
+    ↘ OBSERVED (proposal recorded — observe mode)
+any non-terminal → SUPPRESSED | CANCELLED
+EXECUTING / VERIFYING → RECONCILING | ESCALATED
+RESOLVED, ESCALATED, SUPPRESSED, CANCELLED are terminal: no outgoing edges.</pre>
+
+  <h2>Guardrails visible in this run</h2>
+  <ul>
+    <li><strong>Two arms, one policy.</strong> The first incident stops at
+        <code>OBSERVED</code> (observe mode, zero cluster writes); the second
+        proceeds to <code>PROPOSED</code> and executes.</li>
+    <li><strong>UID-pinned, template-only.</strong> The claim event records the
+        target UID, resource-version and before/after hashes; replicas are not
+        mutated.</li>
+    <li><strong>Single action.</strong> One action row per incident;
+        duplicates and re-deliveries are absorbed by the journal, not re-run.</li>
+    <li><strong>Verification is separate from execution.</strong> A recovery is
+        accepted only with three consecutive 10 s traffic windows (≥100
+        eligible, ≥99% success, ≥99% fast under 300 ms) inside a 180 s bound;
+        missing telemetry escalates instead of retrying.</li>
+    <li><strong>Limits re-checked at execution time:</strong> cooldown ≥600 s,
+        ≤1 incident per incident, ≤3 per hour, allow-listed action only.</li>
+  </ul>
+
+  <h2>Status</h2>
+  <p class="muted">Gates R1–R3 are ACCEPTED in
+     <code>RELEASE_STATUS.md</code>. R4's corrected implementation (durable
+     execution intents, UID-bound execution, autonomous verification) is
+     <strong>implemented and offline-tested, not yet live-verified</strong> —
+     this page shows the accepted R3 evidence only and makes no claim about
+     R4.</p>
+</main>
+<footer><p><a href="../">sre-portfolio demos</a></p></footer>
+<script>
+function add(parent, tag, cls, value) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (value !== undefined) n.textContent = String(value);
+  parent.appendChild(n);
+  return n;
+}
+function badgeFor(state) {
+  if (state === 'RESOLVED' || state === 'EXECUTED') return 'badge pass';
+  if (state === 'FAILED' || state === 'ESCALATED') return 'badge fail';
+  if (state === 'VERIFYING' || state === 'PROPOSED' || state === 'OBSERVED') return 'badge incon';
+  return 'badge';
+}
+
+fetch('../BUILD.json').then(function (r) { return r.json(); }).then(function (b) {
+  document.getElementById('build').textContent =
+    'site data generated from commit ' + b.commit_short + ' (' + b.commit_time + ')';
+});
+
+fetch('./data/r3-live.json').then(function (r) { return r.json(); }).then(function (d) {
+  var root = document.getElementById('run');
+  var card = add(root, 'section', 'card');
+  add(card, 'h3', '', 'R3 live rollback — ' + d.gate);
+  add(card, 'p', 'muted', d.note);
+
+  if (d.verify) {
+    var p = add(card, 'p');
+    add(p, 'span', d.verify.recovered ? 'badge pass' : 'badge fail',
+      d.verify.recovered ? 'verification passed' : 'verification failed');
+    add(p, 'span', 'muted', '  ' + d.verify.reason);
+  }
+
+  d.incidents.forEach(function (inc) {
+    var sec = add(root, 'section', 'card');
+    var t = add(sec, 'table');
+    var head = add(t, 'tr');
+    ['incident', 'state', 'created', 'policy hash'].forEach(function (h) { add(head, 'th', '', h); });
+    var tr = add(t, 'tr');
+    add(tr, 'td', 'muted', inc.id);
+    var td = add(tr, 'td');
+    add(td, 'span', badgeFor(inc.state), inc.state);
+    add(tr, 'td', '', inc.created_at);
+    add(tr, 'td', 'muted', inc.policy_hash.slice(0, 16) + '…');
+
+    var ev = JSON.parse(inc.evidence);
+    add(sec, 'p', 'muted', 'alert ' + (ev.labels ? ev.labels.alertname : '?') +
+      ' on ' + (ev.labels ? ev.labels.deployment : '?') +
+      ' (' + (ev.labels ? ev.labels.namespace : '?') + ')');
+
+    d.actions.filter(function (a) { return a.incident_id === inc.id; }).forEach(function (a) {
+      var p2 = add(sec, 'p');
+      add(p2, 'span', badgeFor(a.status), 'action ' + a.status);
+      add(p2, 'span', 'muted', '  ' + a.action_key.split(':')[1] +
+        ' · desired template ' + a.desired_len + ' bytes · before hash ' +
+        (a.before_len ? a.before_len + ' bytes' : 'none'));
+    });
+
+    add(sec, 'h3', '', 'events');
+    var ol = add(sec, 'ol', 'timeline');
+    d.events.filter(function (e) { return e.incident_id === inc.id; }).forEach(function (e) {
+      var li = add(ol, 'li');
+      add(li, 'span', 'kind', e.seq + ' · ' + e.kind);
+      add(li, 'span', 'muted', '  ' + e.timestamp);
+      add(li, 'pre', '', e.payload);
+    });
+  });
+
+  if (d.execute) {
+    var ex = add(root, 'section', 'card');
+    add(ex, 'h3', '', 'execute result');
+    var t2 = add(ex, 'table');
+    var head2 = add(t2, 'tr');
+    ['field', 'value'].forEach(function (h) { add(head2, 'th', '', h); });
+    Object.keys(d.execute).forEach(function (k) {
+      var tr2 = add(t2, 'tr');
+      add(tr2, 'td', '', k);
+      add(tr2, 'td', 'muted', String(d.execute[k]));
+    });
+  }
+
+  var link = add(root, 'p');
+  var a = add(link, 'a', '', 'raw journal dump');
+  a.href = './data/r3-live.json';
+}).catch(function (e) {
+  add(document.getElementById('run'), 'p', 'error', 'load failed: ' + e);
+});
+</script>
+</body>
+</html>

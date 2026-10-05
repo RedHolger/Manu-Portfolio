@@ -7,7 +7,8 @@ KIND_CLUSTER := sre-lab
 KIND_CONTEXT := kind-$(KIND_CLUSTER)
 
 .PHONY: doctor bootstrap test test-race lint test-rules lab-up smoke \
-        test-workload test-integration test-e2e demo-budgetguard report lab-down
+        test-workload test-integration test-e2e demo-budgetguard report lab-down \
+        site site-check
 
 doctor:
 	./scripts/doctor.sh
@@ -29,6 +30,12 @@ lint:
 test-rules:
 	promtool check rules monitoring/generated-rules.yaml
 	promtool test rules monitoring/rule-tests.yaml
+
+site:
+	./scripts/build-demo-site.sh
+
+site-check:
+	./scripts/build-demo-site.sh --check
 
 lab-up:
 	./scripts/require-context.sh

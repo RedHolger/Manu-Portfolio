@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BudgetGuard — decision documents</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header>
+  <p><a href="../">← all demos</a></p>
+  <h1>BudgetGuard</h1>
+  <p>Compiles a written SLO into Prometheus alert rules and turns measured
+     traffic into a release decision. Exit codes: <code>0</code> PASS,
+     <code>2</code> FAIL, <code>3</code> INCONCLUSIVE.</p>
+  <p class="label"><span class="tag recorded">recorded CLI output</span>
+     Each document below is the file written by
+     <code>bin/budgetguard replay</code> at site build time, over a committed
+     fixture and the committed SLO config. The run is offline and
+     deterministic; nothing here is a live measurement.</p>
+  <p class="label" id="build">…</p>
+</header>
+<main>
+  <h2>Decisions</h2>
+  <table>
+    <thead><tr><th>fixture</th><th>decision</th><th>exit</th><th>reasons</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="muted">The fixtures are the committed release inputs in
+     <code>tests/fixtures/releases/</code>. <code>INCONCLUSIVE</code> is a
+     real outcome: when traffic is below the configured minimum the gate
+     refuses to decide rather than guessing.</p>
+
+  <h2>Decision documents</h2>
+  <div id="details"></div>
+
+  <h2>SLO config used</h2>
+  <pre id="slo">loading configs/slos/reservations.yaml…</pre>
+
+  <h2>Why this gate exists</h2>
+  <ul>
+    <li><strong>Coverage gate:</strong> the evaluated window must be covered
+        by real source samples (≤10% missing, no gap &gt; 20 s per slot),
+        computed with <code>count_over_time</code> over 15 s buckets from two
+        required series per slot — sparse telemetry cannot pass.</li>
+    <li><strong>Fractional counts</strong> are preserved; count-like values
+        are rounded only where the contract says so.</li>
+    <li><strong>Fixtures are validated</strong> (presence, finiteness,
+        relationships) before replay, so a malformed fixture is rejected
+        instead of replayed into a green result.</li>
+    <li><code>history_complete</code> is <code>false</code> for every lab
+        window: a 5-minute canary never proves a 30-day SLO.</li>
+  </ul>
+</main>
+<footer><p><a href="../">sre-portfolio demos</a></p></footer>
+<script>
+function text(el, v) { el.textContent = String(v); }
+function add(parent, tag, cls, value) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (value !== undefined) n.textContent = String(value);
+  parent.appendChild(n);
+  return n;
+}
+function badgeClass(d) {
+  if (d === 'PASS') return 'badge pass';
+  if (d === 'FAIL') return 'badge fail';
+  return 'badge incon';
+}
+
+fetch('../BUILD.json').then(function (r) { return r.json(); }).then(function (b) {
+  text(document.getElementById('build'),
+    'site data generated from commit ' + b.commit_short + ' (' + b.commit_time + ')');
+});
+
+fetch('./data/manifest.json').then(function (r) { return r.json(); }).then(function (m) {
+  var rows = document.getElementById('rows');
+  m.runs.forEach(function (run) {
+    var tr = add(rows, 'tr');
+    var td0 = add(tr, 'td');
+    var a = add(td0, 'a', '', run.fixture);
+    a.href = './data/' + run.fixture + '.json';
+    var td1 = add(tr, 'td');
+    add(td1, 'span', badgeClass(run.decision), run.decision);
+    add(tr, 'td', '', run.exit_code);
+    add(tr, 'td', 'muted', run.reasons.join(', '));
+
+    fetch('./data/' + run.fixture + '.json').then(function (r) { return r.json(); }).then(function (d) {
+      var sec = add(document.getElementById('details'), 'section', 'card');
+      add(sec, 'h3', '', run.fixture + ' → ' + d.decision);
+      add(sec, 'p', 'muted', 'window ' + d.window.start + ' → ' + d.window.end +
+        ' · policy hash ' + d.policy_hash.slice(0, 16) + '…');
+      var t = add(sec, 'table');
+      var head = add(t, 'tr');
+      ['lane', 'eligible', 'bad', 'slow or bad'].forEach(function (h) { add(head, 'th', '', h); });
+      ['stable', 'candidate'].forEach(function (lane) {
+        var tr2 = add(t, 'tr');
+        add(tr2, 'td', '', lane);
+        add(tr2, 'td', '', d[lane].eligible);
+        add(tr2, 'td', '', d[lane].bad);
+        add(tr2, 'td', '', d[lane].slow_or_bad);
+      });
+      add(sec, 'p', 'muted', 'reasons: ' + d.reasons.join(', ') +
+        ' · history_complete=' + d.history_complete +
+        ' · estimated_counts=' + d.estimated_counts);
+      var link = add(sec, 'p');
+      var a2 = add(link, 'a', '', 'raw decision JSON');
+      a2.href = './data/' + run.fixture + '.json';
+    });
+  });
+}).catch(function (e) {
+  add(document.getElementById('rows'), 'tr').textContent = 'load failed: ' + e;
+});
+
+fetch('../slos/reservations.yaml').then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+  .then(function (t) { text(document.getElementById('slo'), t); })
+  .catch(function (e) { text(document.getElementById('slo'), 'unavailable: ' + e); });
+</script>
+</body>
+</html>

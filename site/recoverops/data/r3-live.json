@@ -1,0 +1,142 @@
+{
+ "actions": [
+  {
+   "action_key": "8affb4867ef1ad6dbd2b155d32f84d02:restore",
+   "before_len": 0,
+   "created_at": "2026-10-03T15:13:08.284598Z",
+   "desired_len": 64,
+   "error": "",
+   "incident_id": "8affb4867ef1ad6dbd2b155d32f84d02",
+   "status": "OBSERVED",
+   "updated_at": "2026-10-03T15:13:08.284598Z"
+  },
+  {
+   "action_key": "703350ec1a51073df95851f197dea801:restore",
+   "before_len": 64,
+   "created_at": "2026-10-03T15:13:27.627701Z",
+   "desired_len": 1095,
+   "error": "",
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "status": "EXECUTED",
+   "updated_at": "2026-10-03T15:13:46.476619Z"
+  }
+ ],
+ "commit": "ba51daa9777c38eb63f618e0f1c65ee7b6595cae",
+ "events": [
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "created",
+   "payload": "{\"labels\": {\"alertname\": \"LabBadTemplate\", \"deployment\": \"api-stable\", \"namespace\": \"sre-lab\", \"service\": \"reservations\"}, \"startsAt\": \"2026-10-03T15:13:27Z\"}",
+   "seq": 0,
+   "timestamp": "2026-10-03T15:13:27.62324Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "proposal",
+   "payload": "{\"eligible\": true, \"mode-status\": \"PROPOSED\", \"reason\": \"eligible\", \"snapshot\": \"bbd499486e5d22e8c3d930041acc6d37b8b1cc5f6f80a29854d3a37f13b3beb1\"}",
+   "seq": 1,
+   "timestamp": "2026-10-03T15:13:27.627677Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "transition",
+   "payload": "{\"mode-status\": \"PROPOSED\"}",
+   "seq": 2,
+   "timestamp": "2026-10-03T15:13:27.62867Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "claim",
+   "payload": "{\"before\": \"5b115fb33298\", \"desired\": \"<template omitted: 12 bytes>\", \"rv\": \"217449\", \"uid\": \"70deacef-74e2-42fb-8750-408d3addff54\"}",
+   "seq": 3,
+   "timestamp": "2026-10-03T15:13:46.393797Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "transition",
+   "payload": "{\"by\": \"execute\"}",
+   "seq": 4,
+   "timestamp": "2026-10-03T15:13:46.395448Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "action-status",
+   "payload": "{\"error\": \"\", \"status\": \"VERIFYING\"}",
+   "seq": 5,
+   "timestamp": "2026-10-03T15:13:46.408115Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "transition",
+   "payload": "{\"by\": \"execute-patched\"}",
+   "seq": 6,
+   "timestamp": "2026-10-03T15:13:46.443935Z"
+  },
+  {
+   "incident_id": "703350ec1a51073df95851f197dea801",
+   "kind": "action-status",
+   "payload": "{\"error\": \"\", \"status\": \"EXECUTED\"}",
+   "seq": 7,
+   "timestamp": "2026-10-03T15:13:46.476712Z"
+  },
+  {
+   "incident_id": "8affb4867ef1ad6dbd2b155d32f84d02",
+   "kind": "created",
+   "payload": "{\"labels\": {\"alertname\": \"LabBadTemplate\", \"deployment\": \"api-stable\", \"namespace\": \"sre-lab\", \"service\": \"reservations\"}, \"startsAt\": \"2026-10-03T15:13:07Z\"}",
+   "seq": 0,
+   "timestamp": "2026-10-03T15:13:08.280073Z"
+  },
+  {
+   "incident_id": "8affb4867ef1ad6dbd2b155d32f84d02",
+   "kind": "proposal",
+   "payload": "{\"eligible\": true, \"mode-status\": \"OBSERVED\", \"reason\": \"eligible\", \"snapshot\": \"bbd499486e5d22e8c3d930041acc6d37b8b1cc5f6f80a29854d3a37f13b3beb1\"}",
+   "seq": 1,
+   "timestamp": "2026-10-03T15:13:08.284581Z"
+  },
+  {
+   "incident_id": "8affb4867ef1ad6dbd2b155d32f84d02",
+   "kind": "transition",
+   "payload": "{\"mode-status\": \"OBSERVED\"}",
+   "seq": 2,
+   "timestamp": "2026-10-03T15:13:08.286131Z"
+  }
+ ],
+ "execute": {
+  "action_status": "VERIFYING",
+  "before_hash": "5b115fb332989361f497a164443685a54b2ca044c42e932e228848412a5c4e72",
+  "desired_hash": "",
+  "from_state": "OBSERVED",
+  "incident": "703350ec1a51073df95851f197dea801",
+  "live_hash": "58896c497fad8d8463f7819d628a944dc31e88dba71c768bc6d0dce14eb0ca37",
+  "reason": "patched; proceed to R4 verification",
+  "to_state": "VERIFYING",
+  "uid": "70deacef-74e2-42fb-8750-408d3addff54"
+ },
+ "gate": "R3 ACCEPTED (see RELEASE_STATUS.md)",
+ "generated_by": "scripts/build-demo-site.sh",
+ "incidents": [
+  {
+   "created_at": "2026-10-03T15:13:08.279785Z",
+   "evidence": "{\"labels\":{\"alertname\":\"LabBadTemplate\",\"deployment\":\"api-stable\",\"namespace\":\"sre-lab\",\"service\":\"reservations\"},\"startsAt\":\"2026-10-03T15:13:07Z\"}",
+   "id": "8affb4867ef1ad6dbd2b155d32f84d02",
+   "policy_hash": "dc8ed50107aaaea25123a084ff2c1da1c645a2be821f4f968d55cbc2be119a29",
+   "state": "OBSERVED",
+   "updated_at": "2026-10-03T15:13:08.286103Z"
+  },
+  {
+   "created_at": "2026-10-03T15:13:27.623156Z",
+   "evidence": "{\"labels\":{\"alertname\":\"LabBadTemplate\",\"deployment\":\"api-stable\",\"namespace\":\"sre-lab\",\"service\":\"reservations\"},\"startsAt\":\"2026-10-03T15:13:27Z\"}",
+   "id": "703350ec1a51073df95851f197dea801",
+   "policy_hash": "dc8ed50107aaaea25123a084ff2c1da1c645a2be821f4f968d55cbc2be119a29",
+   "state": "VERIFYING",
+   "updated_at": "2026-10-03T15:13:46.443884Z"
+  }
+ ],
+ "note": "Live kind-sre-lab rollback: webhook to proposal to UID-pinned template-only patch to verification, with a separate observe-mode arm.",
+ "recorded_evidence": true,
+ "source": "results/recoverops/r3-live-20261003T151252Z",
+ "verify": {
+  "reason": "recovered: 3/3 windows \u2265100 eligible, \u226599% success, \u226599% fast<300ms",
+  "recovered": true
+ }
+}

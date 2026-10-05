@@ -1,0 +1,71 @@
+name: ci
+
+# Local equivalent (run before pushing; both must be green):
+#   make lint && make test && make test-rules && make test-scripts
+#   scripts/build-demo-site.sh --check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: build · vet · format · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: build
+        run: go build ./...
+      - name: vet
+        run: go vet ./...
+      - name: gofmt (must be clean)
+        run: |
+          out="$(gofmt -l cmd internal)"
+          if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
+      - name: unit tests
+        run: go test ./... -count=1
+
+  rules:
+    name: prometheus rule fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install promtool 3.15.0 (pinned)
+        run: |
+          set -euo pipefail
+          v=3.15.0   # pinned: versions.lock.json → prom/prometheus:v3.15.0
+          curl -fsSL -o /tmp/prom.tar.gz \
+            "https://github.com/prometheus/prometheus/releases/download/v${v}/prometheus-${v}.linux-amd64.tar.gz"
+          tar -xzf /tmp/prom.tar.gz -C /tmp
+          echo "/tmp/prometheus-${v}.linux-amd64" >> "$GITHUB_PATH"
+      - name: check + test rules
+        run: |
+          promtool check rules monitoring/generated-rules.yaml
+          promtool test rules monitoring/rule-tests.yaml
+
+  scripts:
+    name: shell self-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: selftest (watchdog, context guard, disk floor)
+        run: ./scripts/selftest.sh
+
+  site:
+    name: demo site data drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: regenerate and compare
+        run: ./scripts/build-demo-site.sh --check
