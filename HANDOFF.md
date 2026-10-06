@@ -307,6 +307,11 @@ Decisions worth remembering (see code comments):
   the final HEAD. `git diff 5bf4728..328a989 -- site/` is empty.
 - Docker down in this session's shell; the parallel session ran kind-sre-lab
   live evidence for `05c5ffa` (see `c2546b2`).
+- Landing restyle (`f95f2a8`, CI run 13 green, live = `f95f2a8`): nav, hero,
+  flywheel SVG, audited product copy, real replay transcript. Evidence
+  refreshed (`fabf2b0`); zip rebuilt at HEAD. Local python server on 8899
+  restarted once (old process dead); Chrome headless runs are slow —
+  capture pages one at a time, not in a single command.
 
 ## Session 2026-10-05 (recorded-evidence review follow-ups)
 - Fixed both findings on `publish-demos`: BudgetGuard gap now (worst+1)*step
