@@ -1,14 +1,12 @@
 # deployed tree vs git HEAD
-# HEAD: 328a989161b8087d9053eeb94175949a9f9541ea
+# HEAD: f95f2a8671cd2155a6c8d6f9ac1ff5b2b40a48fc
 index.html: IDENTICAL
 style.css: IDENTICAL
 BUILD.json: deployed is HEAD stamped with deploy_commit (see live-BUILD.json)
 budgetguard/index.html: IDENTICAL
 budgetguard/data/manifest.json: IDENTICAL
-budgetguard/data/error.json: IDENTICAL
 faultlab/index.html: IDENTICAL
 faultlab/data/passed.json: IDENTICAL
-faultlab/data/aborted.json: IDENTICAL
 recoverops/index.html: IDENTICAL
 recoverops/data/r3-live.json: IDENTICAL
 slos/reservations.yaml: IDENTICAL

@@ -2,48 +2,139 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sre-portfolio — SRE lab demos</title>
+<title>Manu Vashisth — SRE Portfolio: The Resilience Suite</title>
 <link rel="stylesheet" href="./style.css">
 </head>
-<body>
-<header>
-  <h1>sre-portfolio demos</h1>
-  <p>A shared SRE lab and three v1.0 products: an SLO release gate, journaled
-     chaos experiments, and evidence-bound automated recovery. Everything on
-     these pages is read-only output of the Go CLIs in this repository — no
-     control plane, no admin endpoint, nothing to click that changes anything.</p>
-  <p class="label" id="build">deployed 328a989161b8 · site data 328a989161b8 · committed 2026-10-06T02:51:27+01:00 · go1.27.1</p>
+<body id="top">
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="#top">Manu Vashisth · SRE Portfolio</a>
+    <span class="nav-links">
+      <a href="#architecture">Architecture</a>
+      <a href="#budgetguard">BudgetGuard</a>
+      <a href="#faultlab">FaultLab</a>
+      <a href="#recoverops">RecoverOps</a>
+      <a href="https://github.com/RedHolger/Manu-Portfolio">GitHub</a>
+      <a href="https://github.com/RedHolger/Manu-Portfolio/blob/publish-demos/docs/postmortems/disk-pressure-2026-09-27.md">Postmortems</a>
+    </span>
+  </div>
+</nav>
+<header class="hero">
+  <h1>Automating Reliability.</h1>
+  <p class="lede">A closed-loop SRE platform that governs releases, injects
+     chaos, and auto-heals a controlled lab.</p>
+  <p>
+    <a class="btn" href="#architecture">View Architecture</a>
+    <a class="btn ghost" href="https://github.com/RedHolger/Manu-Portfolio/tree/publish-demos/docs">Read the Docs</a>
+  </p>
+  <p class="label" id="build">deployed f95f2a8671cd · site data f95f2a8671cd · committed 2026-10-06T03:24:53+01:00 · go1.27.1</p>
 </header>
 <main>
-  <div class="grid">
-    <section class="card">
-      <h3><a href="./budgetguard/">BudgetGuard</a></h3>
-      <p class="muted">SLO compiler and canary release gate.</p>
-      <p><span class="tag recorded">recorded CLI output</span></p>
-      <p>Four deterministic <code>replay</code> runs over committed fixtures:
-         PASS, FAIL, FAIL, INCONCLUSIVE — with the decision document each CLI
-         invocation produced, exit codes included.</p>
-      <p><span class="badge pass">B-01…B-04 ACCEPTED</span></p>
-    </section>
-    <section class="card">
-      <h3><a href="./faultlab/">FaultLab</a></h3>
-      <p class="muted">Bounded, journaled fault experiments.</p>
-      <p><span class="tag recorded">recorded live run</span></p>
-      <p>Two real kind-lab journals: a run that recovered (PASSED) and a run
-         aborted by its failure threshold (FAILED) — every state transition as
-         it was written at the time.</p>
-      <p><span class="badge pass">F-01…F-05 ACCEPTED</span></p>
-    </section>
-    <section class="card">
-      <h3><a href="./recoverops/">RecoverOps</a></h3>
-      <p class="muted">Alert-driven, policy-checked remediation.</p>
-      <p><span class="tag recorded">recorded live run</span></p>
-      <p>The R3 live rollback: observe arm, proposal, UID-pinned template-only
-         patch, verification result — incidents, actions and events straight
-         from the SQLite journal.</p>
-      <p><span class="badge incon">R1–R3 ACCEPTED · R4 unverified</span></p>
-    </section>
-  </div>
+  <h2 id="architecture">The flywheel</h2>
+  <p>One loop, three instruments. <strong>BudgetGuard</strong> observes —
+     it scores measured telemetry against written SLOs and gates the
+     release. <strong>FaultLab</strong> breaks — it injects bounded faults
+     into an isolated lab to find where the SLO bends. <strong>RecoverOps</strong>
+     heals — alert webhooks open incidents, policy picks one remediation,
+     and measured traffic must prove recovery before anything is marked
+     resolved. Everything below links to recorded evidence, never a live
+     control plane.</p>
+  <svg class="flywheel" viewBox="0 0 640 360" role="img" aria-label="Observe, Break, Heal loop: BudgetGuard observes, FaultLab breaks, RecoverOps heals">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#58a6ff" stroke-width="1.6"></path>
+      </marker>
+    </defs>
+    <path class="flow" d="M 278 108 Q 205 175 168 222" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M 196 288 Q 320 312 444 288" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M 472 222 Q 435 175 362 108" marker-end="url(#arrow)"></path>
+    <a href="#budgetguard">
+      <circle class="node" cx="320" cy="70" r="54"></circle>
+      <text class="node-title" x="320" y="64">Observe</text>
+      <text class="node-sub" x="320" y="84">BudgetGuard</text>
+    </a>
+    <a href="#faultlab">
+      <circle class="node" cx="140" cy="272" r="54"></circle>
+      <text class="node-title" x="140" y="266">Break</text>
+      <text class="node-sub" x="140" y="286">FaultLab</text>
+    </a>
+    <a href="#recoverops">
+      <circle class="node" cx="500" cy="272" r="54"></circle>
+      <text class="node-title" x="500" y="266">Heal</text>
+      <text class="node-sub" x="500" y="286">RecoverOps</text>
+    </a>
+  </svg>
+
+  <section class="product" id="budgetguard">
+    <h2>BudgetGuard: SLO governance &amp; deployment gating</h2>
+    <p class="muted">Evaluates measured telemetry against written Service
+       Level Objectives to control release velocity.</p>
+    <ul>
+      <li><strong>High-fidelity telemetry validation.</strong> Enforces a
+        20-second limit on <em>consecutive source-sample timestamps</em>
+        (<code>CheckCoverage</code>), so release decisions rest on
+        contiguous scrapes — a 30&nbsp;s gap straddling the 15&nbsp;s grid,
+        or samples hugging opposite bucket edges, cannot hide inside
+        occupied buckets.</li>
+      <li><strong>Machine-readable release halt.</strong> Exit
+        <code>0</code> PASS, <code>2</code> FAIL, <code>3</code>
+        INCONCLUSIVE — designed to gate a pipeline; the halt itself is the
+        caller's to wire, never a silent guess.</li>
+    </ul>
+    <pre class="terminal">$ bin/budgetguard replay --fixture tests/fixtures/releases/error.json \
+    --config configs/slos/reservations.yaml --end 2026-10-03T05:00:00Z --out /tmp/replay-error.json
+decision: FAIL → /tmp/replay-error.json
+$ echo $?
+2
+$ bin/budgetguard replay --fixture tests/fixtures/releases/healthy.json \
+    --config configs/slos/reservations.yaml --end 2026-10-03T05:00:00Z --out /tmp/replay-healthy.json
+decision: PASS → /tmp/replay-healthy.json
+$ echo $?
+0</pre>
+    <p class="label">Recorded terminal session: the exact commands above, run
+       against the same fixtures the demo data come from.</p>
+    <p><span class="tag recorded">recorded CLI output</span>
+       <span class="badge pass">B-01…B-04 ACCEPTED</span></p>
+    <p><a class="btn ghost" href="./budgetguard/">Open live demo →</a></p>
+  </section>
+
+  <section class="product" id="faultlab">
+    <h2>FaultLab: proactive chaos engineering</h2>
+    <p class="muted">Safely introduces turbulence into an isolated lab to
+       validate resilience before customers are impacted.</p>
+    <ul>
+      <li><strong>Targeted disruption.</strong> Automated delay, connection
+        failure, dependency outage and pod-reset scenarios with TTL-bounded
+        faults and abort thresholds — every run journaled intent → apply →
+        observe → cleanup → recovery health.</li>
+      <li><strong>Deterministic execution.</strong> Per-phase workload
+        evidence, bounded drain, and abort timing with headroom, so
+        automated disruption and recovery sweeps cannot race the clock.</li>
+    </ul>
+    <p><span class="tag recorded">recorded live run</span>
+       <span class="badge pass">F-01…F-05 ACCEPTED</span></p>
+    <p><a class="btn ghost" href="./faultlab/">Open live demo →</a></p>
+  </section>
+
+  <section class="product" id="recoverops">
+    <h2>RecoverOps: automated remediation</h2>
+    <p class="muted">Removes the human bottleneck from incident response
+       with policy-driven safety nets.</p>
+    <ul>
+      <li><strong>Strict recovery gating.</strong>
+        <code>MaxRecoveryFailureRatio = 0.05</code> plus a hard floor of
+        successful 2xx responses before anything is marked healthy — a
+        quiet service is not a recovered one, and a permissive abort
+        threshold can never leak into the verdict.</li>
+      <li><strong>Rollback path.</strong> Severe degradation is restored
+        from a known-good template via UID-pinned, template-only patches;
+        the closed-loop SLI-triggered plane (R4) is implemented but
+        unverified.</li>
+    </ul>
+    <p><span class="tag recorded">recorded live run</span>
+       <span class="badge incon">R1–R3 ACCEPTED · R4 unverified</span></p>
+    <p><a class="btn ghost" href="./recoverops/">Open live demo →</a></p>
+  </section>
 
   <h2>Status, honestly</h2>
   <p>The authoritative gate table lives in the repository
@@ -64,7 +155,7 @@
   </ul>
 </main>
 <footer>
-  <p id="footer-commit">Deployed commit: 328a989161b8087d9053eeb94175949a9f9541ea · generated site data commit: 328a989161b8087d9053eeb94175949a9f9541ea</p>
+  <p id="footer-commit">Deployed commit: f95f2a8671cd2155a6c8d6f9ac1ff5b2b40a48fc · generated site data commit: f95f2a8671cd2155a6c8d6f9ac1ff5b2b40a48fc</p>
 </footer>
 <script>
 fetch('./BUILD.json').then(function (r) { return r.json(); }).then(function (b) {

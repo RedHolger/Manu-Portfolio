@@ -831,3 +831,21 @@ Status reflects executed tests and measured outcomes only.
   (site data unchanged since the first deploy).
 - Still open: no new live lab run from this session (parallel session ran
   kind-sre-lab for `05c5ffa`); GitHub Pages not chosen.
+
+## Session 2026-10-06 — Resilience Suite landing (static restyle)
+
+- Landing-only restyle per approved plan (static HTML/CSS; Next.js
+  declined — would replace the upload + drift-gate pipeline; all-pages
+  nav declined — smallest reviewable diff). `site/index.html`: sticky nav,
+  hero ("Automating Reliability." + corrected "controlled lab" subhead),
+  inline SVG flywheel (Observe/Break/Heal nodes anchor to sections),
+  three product sections with claims-audited copy (pipeline shutdown,
+  staging/production, zero-touch SLI interception, and async-testing
+  claims corrected to exit codes, kind lab, R4 caveat, phase timing),
+  and a real recorded `budgetguard replay` transcript (FAIL/exit 2,
+  PASS/exit 0 — bytes captured from the exact invocations shown).
+  `site/style.css`: nav, hero, buttons, flywheel, terminal, <40rem
+  responsive. Subpages, data, BUILD.json, generator, CI untouched.
+- Verified local 1440px + 390px screenshots, 0 console issues; --check
+  clean (HTML not part of the drift comparison). Commit `f95f2a8`,
+  CI run 13 green, redeployed live = `f95f2a8`, evidence refreshed.

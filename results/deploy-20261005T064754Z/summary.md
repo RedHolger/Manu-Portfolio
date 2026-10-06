@@ -58,6 +58,12 @@ gap now measured on consecutive source timestamps
 `c2546b2`); abort-test headroom for slow runners. Site data files are
 byte-identical to the previous deploy (replay/evidence unchanged).
 
+## Redeploy 2026-10-06: live = `f95f2a8671cd` (Resilience Suite landing)
+
+Landing page restructured (nav, hero, flywheel, product sections, recorded
+replay transcript); no Go, data, or config changes. Live `deploy_commit`
+equals the repo HEAD at deploy time; evidence refreshed in place.
+
 ## Relationship to later commits
 
 `git diff 5bf472897499..HEAD -- site/` is empty: the commits that followed

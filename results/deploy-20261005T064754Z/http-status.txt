@@ -1,8 +1,8 @@
-# deploy verification refreshed 20261006T015552Z UTC
+# deploy verification refreshed 20261006T022846Z UTC
 # base: https://sre-portfolio-demos.vercel.app (anonymous curl, no cookies, no token)
-# HEAD at verify: 328a989161b8087d9053eeb94175949a9f9541ea
+# HEAD at verify: f95f2a8671cd2155a6c8d6f9ac1ff5b2b40a48fc
 
-/                                             200 3915 bytes
+/                                             200 8615 bytes
 /budgetguard/                                 200 5042 bytes
 /faultlab/                                    200 5454 bytes
 /recoverops/                                  200 6201 bytes

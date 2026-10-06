@@ -1,8 +1,8 @@
 # PUBLIC_LINKS.md — verified public URLs for the demo site
 
-Last verified: 2026-10-05 (UTC), site deploy `328a989161b8`, repository
-`publish-demos` at `328a989…` (later commits, if any, are docs/evidence
-only — `git diff 328a989..HEAD -- site/` must stay empty) — see
+Last verified: 2026-10-06 (UTC), site deploy `f95f2a8671cd`, repository
+`publish-demos` at `f95f2a8…` (later commits, if any, are docs/evidence
+only — `git diff f95f2a8..HEAD -- site/` must stay empty) — see
 `results/deploy-20261005T064754Z/` for the raw evidence (HTTP statuses, DOM
 dumps, screenshots, console output, git-tree comparison).
 
@@ -42,7 +42,7 @@ Supporting files (also verified 200):
 | URL | Status |
 |---|---|
 | <https://github.com/RedHolger/Manu-Portfolio> | **VERIFIED** 2026-10-05: `git ls-remote origin HEAD` → `b4933ef…` (all five branches present: `publish-demos` (default), `master` @ `0fe8b77`, `recoverops-dev`, `faultlab-dev`, `correctness-fixes`). |
-| <https://github.com/RedHolger/Manu-Portfolio/actions> | CI `ci.yml` — **PASSING** on `328a989` (run 11: go, rules, scripts, site all green). Earlier failures, all fixed: runs 1–2 tracked exec bits (`core.fileMode=false`, now guarded); runs 3 and 10 a slow-runner abort-timing flake (`TestAbortRecordsRecoverySkipped`, given headroom); `go test` failures are emitted as check-run annotations for diagnosis. |
+| <https://github.com/RedHolger/Manu-Portfolio/actions> | CI `ci.yml` — **PASSING** on `f95f2a8` (run 13: go, rules, scripts, site all green). Earlier failures, all fixed: runs 1–2 tracked exec bits (`core.fileMode=false`, now guarded); runs 3 and 10 a slow-runner abort-timing flake (`TestAbortRecordsRecoverySkipped`, given headroom); `go test` failures are emitted as check-run annotations for diagnosis. |
 | <https://github.com/RedHolger/Manu-Portfolio/actions/workflows/ci.yml/badge.svg> | badge, fetched 2026-10-05: `ci - passing` |
 
 Baselines `0fe8b77` (master) and `cad2f7e` (correctness-fixes) were pushed as-is;
