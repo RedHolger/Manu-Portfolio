@@ -634,7 +634,12 @@ func TestAbortRecordsRecoverySkipped(t *testing.T) {
 	d := newLabDouble(t, "stable", 1) // every request fails → abort
 	r, j, _ := testRunner(t, d.srv.URL)
 	sc := testScenario()
-	sc.FaultSecs = 5 // abort needs ~3 one-second ticks to see two windows
+	// Abort needs ~3 one-second ticks to see two windows, counted from when
+	// failing traffic actually starts (a slow runner delays loadgen ramp-up
+	// and ticker ticks). The phase must outlast that by a wide margin or
+	// the abort never trips and the run fails in recovery instead — a
+	// timing flake seen twice on CI runners, never locally.
+	sc.FaultSecs = 10
 
 	term, err := r.Run(context.Background(), sc, "run-abort")
 	if err == nil {
