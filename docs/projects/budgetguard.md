@@ -34,11 +34,14 @@ BudgetGuard separates three outcomes on purpose:
 ## Correctness properties enforced in code
 
 - **Coverage gate (full window).** The evaluated window must be covered by
-  real source samples: at most 10% missing, no gap larger than 20 s, per slot,
-  computed with `count_over_time` over 15 s buckets from the two required
-  series per slot (`lab_requests_total` and the latency histogram bucket at the
-  SLO threshold). Sparse or unevenly scraped telemetry cannot masquerade as
-  coverage.
+  real source samples: at most 10% missing buckets per slot, computed with
+  `count_over_time` over 15 s buckets from the two required series per slot
+  (`lab_requests_total` and the latency histogram bucket at the
+  SLO threshold). The 20 s gap limit is enforced on actual consecutive
+  source timestamps (`max(timestamp(...))` per step), not bucket occupancy:
+  a 30 s scrape gap straddling the grid, or samples hugging opposite bucket
+  edges, cannot hide inside occupied buckets. Sparse or unevenly scraped
+  telemetry cannot masquerade as coverage.
 - **Telemetry errors keep the window.** A failed query is recorded as a
   telemetry error on the decision and the window start/end are preserved, so
   the evidence of *what* was missing survives.

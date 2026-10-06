@@ -99,19 +99,84 @@ func TestCoverageEmptyFails(t *testing.T) {
 }
 
 // Regression: a real 30s scrape gap straddling the 15s grid leaves a
-// SINGLE empty bucket, which the old worst*step accounting recorded as
-// 15s and passed. The distance between the surrounding present buckets
-// is (1+1)*15s = 30s > 20s, so coverage must fail.
+// SINGLE empty bucket. Bucket occupancy alone cannot see the true gap —
+// worst*step records 15s (passes), (worst+1)*step records 30s but
+// mismeasures the other way for edge-hugging samples — so the gate reads
+// the consecutive source timestamps: the missed scrape at gapAt replays
+// the previous source timestamp, and the 30s step fails the window.
 func TestCoverageSingleMissingBucketFails(t *testing.T) {
 	start := time.Now().UTC().Truncate(time.Second)
-	holes := map[int64]bool{start.Add(150 * time.Second).Unix(): true}
-	s := matrixServer(t, start, holes)
+	gapAt := start.Add(150 * time.Second).Unix()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("query")
+		var vals []string
+		end := start.Add(300 * time.Second).Unix()
+		for ts := start.Add(15 * time.Second).Unix(); ts <= end; ts += 15 {
+			v := "1"
+			if strings.Contains(q, "timestamp(") {
+				if ts == gapAt {
+					v = fmt.Sprintf("%d", ts-15)
+				} else {
+					v = fmt.Sprintf("%d", ts)
+				}
+			} else if ts == gapAt {
+				v = "0"
+			}
+			vals = append(vals, fmt.Sprintf("[%d,%q]", ts, v))
+		}
+		_, _ = w.Write([]byte(
+			`{"status":"success","data":{"resultType":"matrix","result":[` +
+				`{"metric":{},"values":[` + strings.Join(vals, ",") + `]}]}}`))
+	}))
 	defer s.Close()
 	cfg := mustConfig(t)
 	err := CheckCoverage(context.Background(), telemetry.New(s.URL),
 		cfg, "stable", start, start.Add(300*time.Second))
 	if err == nil {
 		t.Fatal("single empty 15s bucket (30s inter-sample gap) must fail coverage")
+	}
+	if !strings.Contains(err.Error(), "between source samples") {
+		t.Fatalf("expected the inter-sample gap error, got: %v", err)
+	}
+	t.Logf("correctly rejected: %v", err)
+}
+
+// Regression for the case bucket logic cannot see at all: source samples
+// hugging opposite edges of ADJACENT occupied buckets (120.1s and 149.9s)
+// hide a 29.8s consecutive-source gap with ZERO empty buckets. Neither
+// worst*step nor (worst+1)*step fails this window; only the consecutive
+// source timestamps do.
+func TestCoverageStraddlingSamplesFail(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	edgeAt := start.Add(150 * time.Second).Unix()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("query")
+		var vals []string
+		end := start.Add(300 * time.Second).Unix()
+		for ts := start.Add(15 * time.Second).Unix(); ts <= end; ts += 15 {
+			v := "1"
+			if strings.Contains(q, "timestamp(") {
+				switch ts {
+				case edgeAt - 15:
+					v = fmt.Sprintf("%.1f", float64(ts-15)+0.1)
+				case edgeAt:
+					v = fmt.Sprintf("%.1f", float64(ts)-0.1)
+				default:
+					v = fmt.Sprintf("%d", ts)
+				}
+			}
+			vals = append(vals, fmt.Sprintf("[%d,%q]", ts, v))
+		}
+		_, _ = w.Write([]byte(
+			`{"status":"success","data":{"resultType":"matrix","result":[` +
+				`{"metric":{},"values":[` + strings.Join(vals, ",") + `]}]}}`))
+	}))
+	defer s.Close()
+	cfg := mustConfig(t)
+	err := CheckCoverage(context.Background(), telemetry.New(s.URL),
+		cfg, "stable", start, start.Add(300*time.Second))
+	if err == nil {
+		t.Fatal("29.8s source gap hidden in adjacent buckets must fail coverage")
 	}
 	if !strings.Contains(err.Error(), "between source samples") {
 		t.Fatalf("expected the inter-sample gap error, got: %v", err)

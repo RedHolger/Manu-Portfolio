@@ -14,13 +14,16 @@
 //   - no gap between consecutive source samples longer than 20s,
 //   - the first and last bucket of the window populated (edges).
 //
-// The gap is measured between consecutive PRESENT buckets, not as
-// empty-bucket time: a real 30s scrape gap straddling the 15s grid leaves
-// a single empty bucket, so worst*step would record 15s and pass a 30s
-// hole. The distance between the surrounding present buckets is
-// (worst+1)*step = 30s, which correctly fails the 20s limit. (The lab
-// scrapes every 5s, so a healthy window never has an empty 15s bucket;
-// any interior hole already implies missed scrapes.)
+// The gap is measured on actual consecutive source timestamps, not bucket
+// occupancy. Each step of max(timestamp(...)) answers the source timestamp
+// of the most recent real scrape, so consecutive answers are consecutive
+// source samples and their distance is the true inter-sample gap. Bucket
+// counting mismeasures in both directions: a real 30s scrape gap
+// straddling the 15s grid leaves a single empty bucket (worst*step records
+// 15s and passes a 30s hole), while samples hugging opposite edges of
+// adjacent occupied buckets overstate it ((worst+1)*step records 30s for a
+// ~15s gap). (The lab scrapes every 5s, so a healthy window never has an
+// empty 15s bucket; any interior hole already implies missed scrapes.)
 //
 // Any violation ⇒ error ⇒ INCONCLUSIVE (never PASS).
 package budgetguard
@@ -53,6 +56,21 @@ func coverageExprs(service, slot, threshold string) []string {
 			service, slot, coverageStep),
 		fmt.Sprintf("sum(count_over_time(lab_request_duration_seconds_bucket{service=%q,slot=%q,le=%q}[%s]))",
 			service, slot, threshold, coverageStep),
+	}
+}
+
+// gapExprs ask, at every evaluation step, for the source timestamp of the
+// most recent real scrape behind each required series. The answers are
+// actual consecutive source timestamps (not evaluation points: Prometheus
+// replays stale values, but timestamp() reports when the replayed sample
+// was really scraped). max() keeps the newest sample across the series
+// group, matching the bucket gate's any-series-counts semantics.
+func gapExprs(service, slot, threshold string) []string {
+	return []string{
+		fmt.Sprintf("max(timestamp(lab_requests_total{service=%q,slot=%q}))",
+			service, slot),
+		fmt.Sprintf("max(timestamp(lab_request_duration_seconds_bucket{service=%q,slot=%q,le=%q}))",
+			service, slot, threshold),
 	}
 }
 
@@ -99,16 +117,10 @@ func CheckCoverage(ctx context.Context, cl *telemetry.Client, cfg ServiceSLO, sl
 				present[idx] = true
 			}
 		}
-		missing, worst, run := 0, 0, 0
+		missing := 0
 		for i := 1; i <= expected; i++ {
-			if present[i] {
-				run = 0
-				continue
-			}
-			missing++
-			run++
-			if run > worst {
-				worst = run
+			if !present[i] {
+				missing++
 			}
 		}
 		if missing == expected {
@@ -118,18 +130,6 @@ func CheckCoverage(ctx context.Context, cl *telemetry.Client, cfg ServiceSLO, sl
 			return fmt.Errorf("slot %s: %d/%d buckets without source samples (>%.0f%%)",
 				slot, missing, expected, coverageMaxMissing*100)
 		}
-		// Gap between consecutive source samples: the present buckets on
-		// either side of a run of `worst` empty buckets are (worst+1)*step
-		// apart, and each proves a real scrape in its window, so the true
-		// inter-sample gap is bounded by that distance. Counting only
-		// empty-bucket time (worst*step) underestimates by one step: a 30s
-		// scrape gap straddling the grid shows a single empty bucket.
-		if worst > 0 {
-			if gap := time.Duration(worst+1) * coverageStep; gap > coverageMaxGap {
-				return fmt.Errorf("slot %s: %.0fs between source samples (>%.0fs)",
-					slot, gap.Seconds(), coverageMaxGap.Seconds())
-			}
-		}
 		// Edges: the buckets touching the window boundaries must hold real
 		// samples — else the window is not fully observed.
 		if !present[1] {
@@ -137,6 +137,40 @@ func CheckCoverage(ctx context.Context, cl *telemetry.Client, cfg ServiceSLO, sl
 		}
 		if !present[expected] {
 			return fmt.Errorf("slot %s: no source sample within one step of window end", slot)
+		}
+	}
+	// Gap between consecutive source samples, measured on the samples
+	// themselves. Missing evaluation points are simply skipped: the gap is
+	// the distance between the surrounding answers, which is exactly the
+	// source-side hole (a dead series also fails the bucket checks above).
+	for _, expr := range gapExprs(service, slot, threshold) {
+		series, err := cl.QueryMatrix(ctx, expr, start.Add(coverageStep), end, coverageStep)
+		if err != nil {
+			return fmt.Errorf("slot %s coverage gap query: %w", slot, err)
+		}
+		for _, s := range series {
+			var prev float64
+			havePrev := false
+			worst := 0.0
+			for _, v := range s.Values {
+				src, err := telemetry.SampleValue(v[1])
+				if err != nil {
+					return fmt.Errorf("slot %s bad source timestamp: %w", slot, err)
+				}
+				if math.IsNaN(src) || math.IsInf(src, 0) {
+					return fmt.Errorf("slot %s bad source timestamp: non-finite", slot)
+				}
+				if havePrev {
+					if d := src - prev; d > worst {
+						worst = d
+					}
+				}
+				prev, havePrev = src, true
+			}
+			if worst > coverageMaxGap.Seconds() {
+				return fmt.Errorf("slot %s: %.0fs between source samples (>%.0fs)",
+					slot, worst, coverageMaxGap.Seconds())
+			}
 		}
 	}
 	return nil
