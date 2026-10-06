@@ -77,3 +77,65 @@ pre {
 .tag.recorded { color: var(--info); border-color: var(--info); }
 .error { color: var(--fail); }
 footer { border-top: 1px solid var(--line); margin-top: 2.5rem; color: var(--muted); font-size: .85rem; }
+
+/* Resilience Suite landing: nav, hero, flywheel, product sections. */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(15, 17, 21, .94);
+  border-bottom: 1px solid var(--line);
+}
+.nav-inner {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: .6rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem 1rem;
+  align-items: baseline;
+}
+.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.nav-links { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .88rem; }
+.nav-links a { text-decoration: none; }
+.nav-links a:hover { text-decoration: underline; }
+.hero h1 { font-size: 2.4rem; margin: 1.2rem 0 .3rem; letter-spacing: -.01em; }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 36rem; }
+.btn {
+  display: inline-block;
+  background: var(--info);
+  color: #0b0d10;
+  font-weight: 700;
+  border: 1px solid var(--info);
+  border-radius: 8px;
+  padding: .45rem 1rem;
+  margin: .4rem .5rem .4rem 0;
+  text-decoration: none;
+}
+.btn.ghost { background: transparent; color: var(--info); }
+.btn:hover { filter: brightness(1.12); }
+.flywheel { width: 100%; max-width: 40rem; height: auto; display: block; margin: 1rem auto; }
+.flywheel .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+.flywheel circle.node { fill: var(--panel); stroke: var(--info); stroke-width: 2; }
+.flywheel a:hover circle.node, .flywheel a:focus circle.node { stroke: var(--pass); }
+.flywheel text { fill: var(--text); text-anchor: middle; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.flywheel .node-title { font-size: 15px; font-weight: 700; }
+.flywheel .node-sub { font-size: 12px; fill: var(--muted); }
+.product {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.2rem 1.3rem;
+  margin: 1.6rem 0;
+}
+.product:target { border-color: var(--info); }
+.product h2 { border-bottom: 0; margin-top: .2rem; }
+.terminal {
+  border-left: 3px solid var(--pass);
+  color: #c9f0d4;
+}
+@media (max-width: 40rem) {
+  .hero h1 { font-size: 1.8rem; }
+  .nav-inner { padding: .6rem 1rem; }
+  main, header, footer { padding-left: 1rem; padding-right: 1rem; }
+}
