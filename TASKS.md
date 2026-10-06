@@ -802,3 +802,32 @@ Status reflects executed tests and measured outcomes only.
   `DEPLOYMENT_PLAN.md` blocker 1 resolved, `CV_SNIPPETS.tex` repo href.
 - Still open: no live lab run (docker down); GitHub Pages not chosen
   (Vercel hosts the demos).
+
+## Session 2026-10-05 (d) — timestamp coverage gate, CI flake, redeploy
+
+- A parallel session had already committed `05c5ffa` (coverage
+  inter-sample gap via (worst+1)*step, FaultLab independent 5% recovery
+  budget + success floor), live evidence `c2546b2` (kind-sre-lab runs),
+  and redeploy notes `6b2dbaa` (CI runs 8–9 green, live = `c2546b2`).
+- Verified that work instead of duplicating it, then closed the residual
+  hole the reviewer named explicitly: bucket-derived gaps mismeasure in
+  BOTH directions (adjacent occupied buckets hide a 29.8s gap with zero
+  empty buckets; boundary-hugging samples overstate). `CheckCoverage`
+  now enforces the 20s limit on consecutive source timestamps
+  (`max(timestamp(...))` per 15s step; NaN/Inf rejected). Commit `485a8f5`.
+- `TestCoverageSingleMissingBucketFails` reworked to timestamp-aware
+  fixtures; new `TestCoverageStraddlingSamplesFail` fails on both
+  worst*step and (worst+1)*step (proven by running it against the prior
+  committed code) and passes on the fix.
+- CI run 10 failed `TestAbortRecordsRecoverySkipped` (annotations named
+  it): the abort needs ~3 ticks after traffic starts and the 5s fault
+  phase is marginal on loaded runners — same signature as run 3, never
+  local, unrelated to either fix. `FaultSecs` 5 → 10 (headroom only;
+  passing runs still short-circuit at ~3–4s). Commit `328a989`; run 11
+  green on all four jobs.
+- Redeployed: live `deploy_commit` = `328a989` (verified via
+  `./scripts/deploy-vercel.sh`); evidence bundle refreshed in place;
+  `PUBLIC_LINKS.md` updated. `git diff 5bf4728..328a989 -- site/` is empty
+  (site data unchanged since the first deploy).
+- Still open: no new live lab run from this session (parallel session ran
+  kind-sre-lab for `05c5ffa`); GitHub Pages not chosen.

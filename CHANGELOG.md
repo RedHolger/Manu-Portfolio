@@ -103,4 +103,17 @@ on 2026-10-05. Published to github.com/RedHolger/Manu-Portfolio with CI green
 (go/tests, promtool, shell self-tests, site drift); six shell scripts that
 were tracked 100644 under `core.fileMode=false` are now 100755, so
 `make setup`/`register` and the demo generator work in a fresh clone.
-No lab behaviour changed; no live cluster run.
+No lab behaviour changed; no live cluster run from this shell (the
+parallel session's kind-sre-lab evidence for the two fixes is in
+`results/faultlab/live-short-20261005T100425Z/` and
+`results/budgetguard/kind-fullwindow-20261005T100739Z/`).
+
+# Unreleased review follow-ups — 2026-10-05 (timestamp gap, abort headroom)
+
+Coverage gap enforced on consecutive source timestamps
+(`max(timestamp(...))`) instead of the bucket-derived bound, which
+underestimated straddling gaps and overstated edge-hugging samples; the
+single-missing-bucket regression now uses timestamp-aware fixtures and a
+new straddling-samples test fails on both prior accountings. Abort test
+given fault-phase headroom for slow CI runners (test-only change).
+Deployed live as `328a989`; CI green.

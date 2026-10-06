@@ -1,8 +1,8 @@
 # deployed tree vs git HEAD
-# HEAD: 5bf47289749902c97dc7605f3431254ec55a0bec
+# HEAD: 328a989161b8087d9053eeb94175949a9f9541ea
 index.html: IDENTICAL
 style.css: IDENTICAL
-BUILD.json: deployed is HEAD stamped with deploy_commit (see live-BUILD.json); regenerating with --stamp-deploy HEAD reproduces it
+BUILD.json: deployed is HEAD stamped with deploy_commit (see live-BUILD.json)
 budgetguard/index.html: IDENTICAL
 budgetguard/data/manifest.json: IDENTICAL
 budgetguard/data/error.json: IDENTICAL

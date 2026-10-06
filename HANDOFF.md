@@ -301,7 +301,12 @@ Decisions worth remembering (see code comments):
   output is now emitted as check-run annotations (public API) so a
   recurrence names the test. Local `go test ./... -count=1` green after the
   same commits.
-- Docker down → no live lab run this session.
+- This session (d): coverage gap now on consecutive source timestamps
+  (`485a8f5`); abort-test slow-runner headroom (`328a989`, CI run 11
+  green); redeployed live = `328a989`; evidence refreshed; zip rebuilt at
+  the final HEAD. `git diff 5bf4728..328a989 -- site/` is empty.
+- Docker down in this session's shell; the parallel session ran kind-sre-lab
+  live evidence for `05c5ffa` (see `c2546b2`).
 
 ## Session 2026-10-05 (recorded-evidence review follow-ups)
 - Fixed both findings on `publish-demos`: BudgetGuard gap now (worst+1)*step

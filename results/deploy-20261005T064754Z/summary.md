@@ -45,6 +45,19 @@ Host: Vercel, project `sre-portfolio-demos` (hobby/static, no charge),
 open https://sre-portfolio-demos.vercel.app/
 ```
 
+## Redeploy 2026-10-05: live = `328a989161b8`
+
+Redeployed with `./scripts/deploy-vercel.sh` after the two review fixes.
+Live `deploy_commit` is `328a989161b8` (this bundle refreshed against it:
+statuses, DOM, screenshots, `live-BUILD.json`, `git-tree-match.txt`).
+What changed since the previous deploy (`5bf4728`): BudgetGuard coverage
+gap now measured on consecutive source timestamps
+(`TestCoverageSingleMissingBucketFails` timestamp-aware,
+`TestCoverageStraddlingSamplesFail` new); FaultLab recovery on its own
+5% budget + success floor (parallel session `05c5ffa`, live-verified
+`c2546b2`); abort-test headroom for slow runners. Site data files are
+byte-identical to the previous deploy (replay/evidence unchanged).
+
 ## Relationship to later commits
 
 `git diff 5bf472897499..HEAD -- site/` is empty: the commits that followed
